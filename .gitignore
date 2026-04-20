@@ -1,0 +1,30 @@
+node_modules/
+dist/
+.env
+.env.local
+.env.*.local
+*.local
+
+# Claude Code config
+.claude/
+
+# IoT simulation scripts (not part of web app)
+simulate device/
+
+# Old single-file version (superseded by Vite project)
+app.jsx
+styles.css
+Smart Home Control Center.html
+
+# Editor
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS
+.DS_Store
+Thumbs.db
