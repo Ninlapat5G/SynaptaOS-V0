@@ -57,9 +57,8 @@ export default function App() {
     let merged = saved ? { ...DEFAULT_SETTINGS, ...saved } : DEFAULT_SETTINGS
     if (merged.mqtt) {
       // Force WSS so the app works on HTTPS deployments (Vercel etc.)
-      // ws:// is blocked by browsers when the page is served over HTTPS (mixed content)
       if (merged.mqtt.broker?.startsWith('ws://')) {
-        merged.mqtt.broker = merged.mqtt.broker.replace('ws://', 'wss://').replace(':8000/', ':8884/')
+        merged.mqtt.broker = merged.mqtt.broker.replace('ws://', 'wss://').replace(':8000', ':8884')
         merged.mqtt.port   = '8884'
       }
     }
@@ -92,17 +91,23 @@ export default function App() {
     if (!settings.mqtt.broker) return
     let client
     try {
+      // ใช้ clientId แบบสุ่มเพื่อป้องกันการชนกัน (clash) บน public broker
       client = mqtt.connect(settings.mqtt.broker, {
-        port:     parseInt(settings.mqtt.port || '8000', 10),
-        protocol: settings.mqtt.broker.startsWith('wss') ? 'wss' : 'ws',
+        clientId: 'synapta_web_' + Math.random().toString(16).substring(2, 10),
         keepalive: 30,
+        clean: true,
+        reconnectPeriod: 5000,
       })
+
       client.on('connect', () => {
+        console.log('[MQTT] Connected to', settings.mqtt.broker)
         client.subscribe(`${settings.mqtt.baseTopic}/#`)
         setMqttClient(client)
       })
+
       client.on('message', (topic, message) => {
         const val = message.toString()
+        console.log(`[MQTT] Received: ${topic} -> ${val}`)
         setSensorCache(prev => ({ ...prev, [topic]: val }))
         setDevices(p =>
           p.map(d => {
@@ -118,11 +123,20 @@ export default function App() {
           }),
         )
       })
+
+      client.on('error', (err) => {
+        console.error('[MQTT] Connection Error:', err)
+      })
+
+      client.on('offline', () => {
+        console.warn('[MQTT] Client went offline')
+      })
+
     } catch (err) {
-      console.error('MQTT connect error:', err)
+      console.error('MQTT setup error:', err)
     }
     return () => { if (client) { client.end(); setMqttClient(null) } }
-  }, [settings.mqtt.broker, settings.mqtt.port, settings.mqtt.baseTopic])
+  }, [settings.mqtt.broker, settings.mqtt.baseTopic])
 
   // ── Device state + MQTT publish ─────────────────────────────────────────────
   const updateDevice = useCallback(
@@ -131,6 +145,7 @@ export default function App() {
       if (mqttClient && next.pubTopic && isFinal !== false) {
         const payload = next.type === 'digital' ? (next.on ? 'true' : 'false') : String(next.value)
         mqttClient.publish(next.pubTopic, payload)
+        console.log(`[MQTT] Published: ${next.pubTopic} -> ${payload}`)
       }
     },
     [mqttClient],
