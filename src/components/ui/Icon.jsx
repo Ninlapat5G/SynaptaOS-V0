@@ -31,6 +31,13 @@ export default function Icon({ name, size = 18 }) {
     case 'menu':    return <svg viewBox="0 0 24 24" {...s}><path d="M3 6h18M3 12h18M3 18h18"/></svg>
     case 'trash':   return <svg viewBox="0 0 24 24" {...s}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
     case 'check':   return <svg viewBox="0 0 24 24" {...s}><path d="M20 6L9 17l-5-5"/></svg>
+    case 'mic':     return <svg viewBox="0 0 24 24" {...s}><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3M8 21h8"/></svg>
+    case 'micOff':  return <svg viewBox="0 0 24 24" {...s}><path d="M9 9v3a3 3 0 0 0 5.12 2.12"/><path d="M15 9.34V6a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2"/><path d="M19 10v2a7 7 0 0 1-.11 1.23"/><path d="M12 19v2M8 23h8"/><path d="M2 2l20 20"/></svg>
+    case 'qr':      return <svg viewBox="0 0 24 24" {...s}><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v3M14 20h3M17 17h4v4"/></svg>
+    case 'scan':    return <svg viewBox="0 0 24 24" {...s}><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/></svg>
+    case 'share':   return <svg viewBox="0 0 24 24" {...s}><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>
+    case 'download':return <svg viewBox="0 0 24 24" {...s}><path d="M12 4v12M6 10l6 6 6-6M4 20h16"/></svg>
+    case 'alert':   return <svg viewBox="0 0 24 24" {...s}><path d="M12 3L2 20h20z"/><path d="M12 10v5M12 18v.5"/></svg>
     default: return null
   }
 }

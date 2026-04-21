@@ -3,21 +3,70 @@ import { motion, AnimatePresence } from 'framer-motion'
 import Icon from './ui/Icon'
 import ChatBubble, { TypingBubble } from './chat/ChatBubble'
 import ToolPill from './chat/ToolPill'
+import { createRecognizer, isSpeechSupported } from '../utils/speech'
+
+const detectVoiceLang = () => {
+  const nav = typeof navigator !== 'undefined' ? (navigator.language || '') : ''
+  return nav.toLowerCase().startsWith('en') ? 'en-US' : 'th-TH'
+}
 
 export default function ChatPage({
   messages, onSend, thinking, executing, onClear, modelName, skillCount, msgCount,
 }) {
   const [draft, setDraft] = useState('')
+  const [listening, setListening] = useState(false)
+  const [voiceError, setVoiceError] = useState(null)
   const scrollRef = useRef(null)
+  const recogRef = useRef(null)
+  const draftBeforeVoice = useRef('')
 
   useEffect(() => {
     const el = scrollRef.current
     if (el) el.scrollTop = el.scrollHeight
   }, [messages, thinking, executing])
 
+  useEffect(() => () => recogRef.current?.abort(), [])
+
   const submit = () => {
     if (draft.trim()) { onSend(draft.trim()); setDraft('') }
   }
+
+  const toggleVoice = () => {
+    if (listening) { recogRef.current?.stop(); return }
+    if (!isSpeechSupported()) {
+      setVoiceError('เบราว์เซอร์นี้ไม่รองรับ Voice (ลองใช้ Chrome/Edge)')
+      setTimeout(() => setVoiceError(null), 3000)
+      return
+    }
+    draftBeforeVoice.current = draft ? draft + ' ' : ''
+    const rec = createRecognizer({
+      lang: detectVoiceLang(),
+      onResult: (text) => setDraft(draftBeforeVoice.current + text),
+      onEnd:    (finalText) => {
+        setListening(false)
+        if (finalText) {
+          const full = (draftBeforeVoice.current + finalText).trim()
+          setDraft('')
+          onSend(full)
+        }
+      },
+      onError: (err) => {
+        setListening(false)
+        if (err === 'not-allowed' || err === 'service-not-allowed') {
+          setVoiceError('กรุณาอนุญาตไมโครโฟนในเบราว์เซอร์')
+        } else if (err !== 'aborted' && err !== 'no-speech') {
+          setVoiceError(`Voice error: ${err}`)
+        }
+        setTimeout(() => setVoiceError(null), 3000)
+      },
+    })
+    if (!rec) return
+    recogRef.current = rec
+    rec.start()
+    setListening(true)
+  }
+
+  const busy = thinking || !!executing
 
   return (
     <div className="sh-chatpage">
@@ -48,7 +97,7 @@ export default function ChatPage({
             <div className="sh-chat-empty">
               <Icon name="sparkle" size={28} />
               <p>เริ่มต้นบทสนทนาใหม่</p>
-              <span className="mono">พิมพ์คำสั่งหรือคำถามด้านล่าง</span>
+              <span className="mono">พิมพ์คำสั่ง หรือกดไมค์เพื่อพูด</span>
             </div>
           ) : (
             <>
@@ -78,6 +127,19 @@ export default function ChatPage({
           className="sh-composer"
           onSubmit={e => { e.preventDefault(); submit() }}
         >
+          <AnimatePresence>
+            {voiceError && (
+              <motion.div
+                className="sh-voice-error mono"
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+              >
+                <Icon name="alert" size={11} /> {voiceError}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <div className="sh-composer-row">
             <textarea
               value={draft}
@@ -88,13 +150,25 @@ export default function ChatPage({
                   submit()
                 }
               }}
-              placeholder="สั่งงานบ้าน… เช่น 'เปิดไฟห้องนั่งเล่น' หรือ 'dim bedroom to 80'"
+              placeholder={listening ? '🎙️ กำลังฟัง…' : "สั่งงานบ้าน… เช่น 'เปิดไฟห้องนั่งเล่น' หรือ 'dim bedroom to 80'"}
               rows={1}
+              disabled={listening}
             />
+            <motion.button
+              type="button"
+              className={`sh-mic ${listening ? 'on' : ''}`}
+              onClick={toggleVoice}
+              disabled={busy}
+              whileTap={{ scale: 0.9 }}
+              whileHover={{ scale: 1.05 }}
+              title={listening ? 'หยุดฟัง' : 'พูดใส่ไมค์'}
+            >
+              <Icon name={listening ? 'micOff' : 'mic'} size={15} />
+            </motion.button>
             <motion.button
               type="submit"
               className="sh-send"
-              disabled={!draft.trim() || thinking || !!executing}
+              disabled={!draft.trim() || busy || listening}
               whileTap={{ scale: 0.9 }}
               whileHover={{ scale: 1.05 }}
             >

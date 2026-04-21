@@ -11,7 +11,9 @@ import DeviceCard, { AddDeviceTile } from './components/DeviceCard'
 import ChatPage from './components/ChatPage'
 import SettingsPage from './components/SettingsPage'
 import TweaksPanel from './components/TweaksPanel'
+import QRShareModal from './components/QRShareModal'
 import Icon from './components/ui/Icon'
+import { decodePayload, applyPayload } from './utils/qrshare'
 
 const pageVariants = {
   initial: { opacity: 0, y: 10 },
@@ -269,6 +271,34 @@ export default function App() {
     window.location.reload()
   }, [])
 
+  // ── QR Share / Import ─────────────────────────────────────────────────────────
+  const [qrOpen, setQrOpen]   = useState(false)
+  const [qrMode, setQrMode]   = useState('share')
+  const [toast, setToast]     = useState(null)
+
+  const openQR = useCallback(mode => { setQrMode(mode); setQrOpen(true) }, [])
+
+  const handleScanned = useCallback(rawText => {
+    const result = decodePayload(rawText)
+    if (!result.ok) {
+      setToast({ type: 'error', text: result.error })
+      setTimeout(() => setToast(null), 3500)
+      return
+    }
+    const applied = applyPayload({
+      payload: result.payload,
+      settings,
+      devices: devicesRef.current,
+      tweaks,
+    })
+    setSettings(applied.settings)
+    saveSettings(applied.settings)
+    setDevices(applied.devices)
+    setTweaks(applied.tweaks)
+    setToast({ type: 'ok', text: `Import สำเร็จ: ${applied.summary.join(' · ')}` })
+    setTimeout(() => setToast(null), 4000)
+  }, [settings, tweaks])
+
   // ── Stats ─────────────────────────────────────────────────────────────────────
   const activeCount   = devices.filter(d => d.type === 'digital' ? d.on : d.value > 0).length
   const analogDevices = devices.filter(d => d.type === 'analog')
@@ -414,6 +444,7 @@ export default function App() {
                   onSave={handleSaveSettings}
                   mqttStatus={mqttStatus}
                   onClearAll={handleClearAll}
+                  onOpenQR={openQR}
                 />
               </motion.div>
             )}
@@ -426,6 +457,31 @@ export default function App() {
         activeCount={activeCount} deviceCount={devices.length}
       />
       <TweaksPanel open={tweaksOpen} tweaks={tweaks} onChange={patch => setTweaks(t => ({ ...t, ...patch }))} />
+
+      <QRShareModal
+        open={qrOpen}
+        mode={qrMode}
+        onClose={() => setQrOpen(false)}
+        settings={settings}
+        devices={devices}
+        tweaks={tweaks}
+        onScanned={handleScanned}
+      />
+
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            key="toast"
+            className={`sh-toast ${toast.type}`}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+          >
+            <Icon name={toast.type === 'ok' ? 'check' : 'alert'} size={14} />
+            {toast.text}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
