@@ -1,92 +1,182 @@
-export async function callAgentRouter({ text, settings, deviceList }) {
-  const skillTools = (settings.skills || [])
-    .filter(s => s.enabled)
-    .map(sk => {
-      let params = { type: 'object', properties: {} }
-      try {
-        const p = JSON.parse(sk.schema)
-        if (p?.type === 'object') params = p
-      } catch {}
-      return {
-        type: 'function',
-        function: { name: sk.name, description: sk.description, parameters: params },
+// ── LLM Client ────────────────────────────────────────────────────────────────
+// Wraps fetch calls to any OpenAI-compatible endpoint.
+// Swap endpoint/model by passing different settings — no other code changes needed.
+
+function createLLMClient({ endpoint, apiKey, model }) {
+  const url     = `${endpoint}/chat/completions`
+  const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` }
+  const mdl     = model || 'typhoon-v2-70b-instruct'
+
+  async function chat(messages, options = {}) {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ model: mdl, messages, ...options }),
+    })
+    if (!res.ok) throw new Error(`LLM ${res.status}: ${await res.text()}`)
+    return res.json()
+  }
+
+  async function stream(messages, options = {}, onChunk) {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ model: mdl, messages, stream: true, ...options }),
+    })
+    if (!res.ok) throw new Error(`LLM ${res.status}: ${await res.text()}`)
+
+    const reader  = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer    = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop()
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
+        const data = line.slice(6).trim()
+        if (data === '[DONE]') return
+        try {
+          const json  = JSON.parse(data)
+          const delta = json.choices?.[0]?.delta?.content
+          if (delta) onChunk(delta)
+        } catch {}
       }
+    }
+  }
+
+  return { chat, stream }
+}
+
+// ── Mini Graph Engine ──────────────────────────────────────────────────────────
+// LangGraph-inspired: nodes are async functions (state) => state.
+// Edges are functions (state) => nextNodeName | null (null = END).
+
+function createGraph({ nodes, edges, entry }) {
+  return {
+    async run(initialState) {
+      let state   = initialState
+      let current = entry
+      while (current) {
+        const node = nodes[current]
+        if (!node) throw new Error(`Agent graph: node "${current}" not found`)
+        state   = await node(state)
+        current = edges[current]?.(state) ?? null
+      }
+      return state
+    },
+  }
+}
+
+// ── Agent Nodes ────────────────────────────────────────────────────────────────
+
+async function routerNode(state) {
+  const { text, settings, deviceList } = state
+  const llm = createLLMClient(settings)
+
+  const tools = (settings.skills || [])
+    .filter(sk => sk.enabled)
+    .map(sk => {
+      let parameters = { type: 'object', properties: {} }
+      try { const p = JSON.parse(sk.schema); if (p?.type === 'object') parameters = p } catch {}
+      return { type: 'function', function: { name: sk.name, description: sk.description, parameters } }
     })
 
-  const agentSystemPrompt = `You are an invisible Autonomous IoT Routing Agent. Your ONLY job is to select tools to control or read devices based on the user's request.
-CRITICAL RULES:
-1. For mqtt_publish, you MUST use the EXACT 'pubTopic' string from the Available devices list below. Do NOT shorten or invent topics.
-2. For payload:
-   - If type is 'digital': payload MUST be exactly "true" (to turn on) or "false" (to turn off).
-   - If type is 'analog': payload MUST be a number string between "0" and "255" (e.g. "128").
-3. If no device manipulation is needed, respond with "NO_TOOL_NEEDED".
-4. Do NOT output conversational text. Output ONLY tool calls or "NO_TOOL_NEEDED".
+  const systemPrompt = `You are an invisible IoT Routing Agent. Select tools to control or read devices.
+RULES:
+1. mqtt_publish: use the EXACT pubTopic from the device list — never shorten or invent topics.
+2. Digital payload: exactly "true" or "false".
+3. Analog payload: number string "0"–"255".
+4. If no device action needed: respond "NO_TOOL_NEEDED" with no tool calls.
+5. No conversational text — only tool calls or "NO_TOOL_NEEDED".
 
 Available devices:
 ${JSON.stringify(deviceList, null, 2)}`
 
-  const res = await fetch(`${settings.endpoint}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${settings.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: settings.model || 'typhoon-v2-70b-instruct',
-      messages: [
-        { role: 'system', content: agentSystemPrompt },
-        { role: 'user', content: text },
-      ],
-      tools: skillTools.length > 0 ? skillTools : undefined,
-      tool_choice: 'auto',
-      temperature: 0.1,
-    }),
-  })
+  const data = await llm.chat(
+    [{ role: 'system', content: systemPrompt }, { role: 'user', content: text }],
+    { tools: tools.length ? tools : undefined, tool_choice: 'auto', temperature: 0.1 },
+  )
 
-  if (!res.ok) throw new Error(`Agent Error ${res.status}`)
-  return res.json()
+  const msg = data.choices?.[0]?.message
+  if (!msg) throw new Error('Router returned no response from API')
+
+  return { ...state, toolCalls: msg.tool_calls || [] }
 }
 
-export async function callFinalResponse({ text, apiHistory, settings, toolContext, deviceList }) {
-  const stateSummary = deviceList
-    ? deviceList
-        .map(
-          d =>
-            `- [${d.room}] ${d.name} (${d.type}): ${
-              d.type === 'digital' ? (d.on ? 'ON' : 'OFF') : d.value
-            }`,
-        )
-        .join('\n')
-    : 'Unknown'
+async function toolExecutorNode(state) {
+  const { toolCalls, executeTool, onToolCall, onToolResult } = state
+  const toolResults = []
 
-  const finalSystemPrompt = `${settings.systemPrompt}
+  for (const tc of toolCalls) {
+    const name = tc.function.name
+    let args = {}
+    try { args = JSON.parse(tc.function.arguments || '{}') } catch { args = tc.function.arguments }
+
+    onToolCall?.(name, args)
+    await new Promise(r => setTimeout(r, 600))
+
+    const result = await executeTool(name, args)
+    onToolResult?.(name, args, result)
+    toolResults.push({ name, args, result })
+  }
+
+  return { ...state, toolResults }
+}
+
+async function responderNode(state) {
+  const { text, settings, apiHistory, toolResults = [], deviceList, onStream } = state
+  const llm = createLLMClient(settings)
+
+  const stateSummary = (deviceList || [])
+    .map(d => `- [${d.room}] ${d.name} (${d.type}): ${d.type === 'digital' ? (d.on ? 'ON' : 'OFF') : d.value}`)
+    .join('\n')
+
+  const toolContext = toolResults.length
+    ? toolResults.map(t => `Tool ${t.name}: ${JSON.stringify(t.result)}`).join('\n')
+    : 'None — no tools were called'
+
+  const systemPrompt = `${settings.systemPrompt}
 
 [User Info]
-The person you are talking to is named "${settings.profile?.name || 'User'}" (Role: ${settings.profile?.role || 'Guest'}).
+Name: "${settings.profile?.name || 'User'}" · Role: ${settings.profile?.role || 'Guest'}
 
 [Current Home Status]
-${stateSummary}
+${stateSummary || 'No devices registered'}
 
-[Tool Execution Result]
-${toolContext || 'None. (You did not run any tools, or didn\'t need to)'}`
+[Tool Execution Results]
+${toolContext}`
 
-  const res = await fetch(`${settings.endpoint}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${settings.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: settings.model || 'typhoon-v2-70b-instruct',
-      messages: [
-        { role: 'system', content: finalSystemPrompt },
-        ...apiHistory,
-        { role: 'user', content: text },
-      ],
-      temperature: 0.7,
-    }),
-  })
+  let reply = ''
+  await llm.stream(
+    [{ role: 'system', content: systemPrompt }, ...apiHistory, { role: 'user', content: text }],
+    { temperature: 0.7 },
+    chunk => { reply += chunk; onStream?.(chunk) },
+  )
 
-  if (!res.ok) throw new Error(`API Error ${res.status}`)
-  return res.json()
+  return { ...state, reply }
 }
+
+// ── Agent Graph ────────────────────────────────────────────────────────────────
+
+const agentGraph = createGraph({
+  nodes: {
+    router:       routerNode,
+    toolExecutor: toolExecutorNode,
+    responder:    responderNode,
+  },
+  edges: {
+    router:       state => state.toolCalls.length > 0 ? 'toolExecutor' : 'responder',
+    toolExecutor: ()    => 'responder',
+  },
+  entry: 'router',
+})
+
+// ── Public API ─────────────────────────────────────────────────────────────────
+// params: { text, settings, deviceList, apiHistory, executeTool, onStream, onToolCall, onToolResult }
+// returns: { ...state, reply }
+
+export const runAgent = params => agentGraph.run({ toolCalls: [], toolResults: [], ...params })

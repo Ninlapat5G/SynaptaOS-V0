@@ -1,40 +1,28 @@
-const CHUNK = 3500
+const KEYS = {
+  SETTINGS: 'sh_settings',
+  DEVICES:  'sh_devices',
+  AREAS:    'sh_areas',
+}
 
-const CS = {
-  set(k, v, days = 365) {
-    const exp = new Date(Date.now() + days * 864e5).toUTCString()
-    document.cookie = `${k}=${encodeURIComponent(v)};expires=${exp};path=/;SameSite=Lax`
+const ls = {
+  get: key => {
+    try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : null } catch { return null }
   },
-  get(k) {
-    const m = document.cookie.split(';').find(c => c.trim().startsWith(k + '='))
-    return m ? decodeURIComponent(m.trim().slice(k.length + 1)) : null
+  set: (key, val) => {
+    try { localStorage.setItem(key, JSON.stringify(val)) } catch {}
   },
-  del(k) {
-    document.cookie = `${k}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`
+  del: key => {
+    try { localStorage.removeItem(key) } catch {}
   },
 }
 
-export function cookieSave(obj) {
-  try {
-    const s = JSON.stringify(obj)
-    const n = Math.ceil(s.length / CHUNK)
-    const old = parseInt(CS.get('sh_n') || '0')
-    for (let i = 0; i < old; i++) CS.del(`sh_${i}`)
-    CS.set('sh_n', String(n))
-    for (let i = 0; i < n; i++) CS.set(`sh_${i}`, s.slice(i * CHUNK, (i + 1) * CHUNK))
-    return true
-  } catch {
-    return false
-  }
-}
+export const saveSettings = obj => ls.set(KEYS.SETTINGS, obj)
+export const loadSettings = ()  => ls.get(KEYS.SETTINGS)
 
-export function cookieLoad() {
-  try {
-    const n = parseInt(CS.get('sh_n') || '0')
-    if (!n) return null
-    const s = Array.from({ length: n }, (_, i) => CS.get(`sh_${i}`) || '').join('')
-    return JSON.parse(s)
-  } catch {
-    return null
-  }
-}
+export const saveDevices = arr => ls.set(KEYS.DEVICES, arr)
+export const loadDevices = ()  => ls.get(KEYS.DEVICES)
+
+export const saveAreas = arr => ls.set(KEYS.AREAS, arr)
+export const loadAreas = ()  => ls.get(KEYS.AREAS)
+
+export const clearAll = () => Object.values(KEYS).forEach(k => ls.del(k))

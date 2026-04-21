@@ -3,15 +3,31 @@ import { motion } from 'framer-motion'
 import Icon from './ui/Icon'
 import Toggle from './ui/Toggle'
 
-export default function SettingsPage({ settings, onSave }) {
-  const [s, setS] = useState(settings)
+const MQTT_STATUS_LABEL = {
+  connecting:   'Connecting…',
+  connected:    'BROKER ONLINE · QoS 2 · real-time subscribed',
+  reconnecting: 'Reconnecting…',
+  error:        'Connection Error',
+  offline:      'Offline',
+}
+
+const MQTT_DOT_STYLE = {
+  connecting:   { background: 'var(--ink-xdim)',        animation: 'pulse-dot 1s ease-in-out infinite' },
+  connected:    { background: 'var(--accent)',           animation: 'pulse-dot 2s ease-in-out infinite' },
+  reconnecting: { background: 'oklch(0.75 0.18 55)',    animation: 'pulse-dot 1s ease-in-out infinite' },
+  error:        { background: 'oklch(0.65 0.22 25)',    animation: 'none' },
+  offline:      { background: 'var(--ink-xdim)',        animation: 'none' },
+}
+
+export default function SettingsPage({ settings, onSave, mqttStatus = 'offline', onClearAll }) {
+  const [s, setS]       = useState(settings)
   const [dirty, setDirty] = useState(false)
   const [saved, setSaved] = useState(false)
 
   useEffect(() => { setS(settings); setDirty(false) }, [settings])
 
-  const set    = (k, v) => { setS(p => ({ ...p, [k]: v })); setDirty(true); setSaved(false) }
-  const setMq  = (k, v) => { setS(p => ({ ...p, mqtt: { ...p.mqtt, [k]: v } })); setDirty(true); setSaved(false) }
+  const set    = (k, v) => { setS(p => ({ ...p, [k]: v }));                         setDirty(true); setSaved(false) }
+  const setMq  = (k, v) => { setS(p => ({ ...p, mqtt:    { ...p.mqtt,    [k]: v } })); setDirty(true); setSaved(false) }
   const setPro = (k, v) => { setS(p => ({ ...p, profile: { ...p.profile, [k]: v } })); setDirty(true); setSaved(false) }
 
   const toggleSkill = id =>
@@ -24,13 +40,15 @@ export default function SettingsPage({ settings, onSave }) {
     const id = 'skill-' + Date.now().toString(36)
     setS(p => ({
       ...p,
-      skills: [...p.skills, { id, name: 'new_tool', description: 'Describe what this tool does.', enabled: true, schema: '{"type":"object","properties":{}}' }],
+      skills: [
+        ...p.skills,
+        { id, name: 'new_tool', description: 'Describe what this tool does.', enabled: true, schema: '{"type":"object","properties":{}}' },
+      ],
     }))
     setDirty(true)
   }
 
-  const removeSkill = id =>
-    setS(p => ({ ...p, skills: p.skills.filter(sk => sk.id !== id) }))
+  const removeSkill = id => setS(p => ({ ...p, skills: p.skills.filter(sk => sk.id !== id) }))
 
   const handleSave = () => {
     onSave(s)
@@ -38,6 +56,15 @@ export default function SettingsPage({ settings, onSave }) {
     setSaved(true)
     setTimeout(() => setSaved(false), 2500)
   }
+
+  const handleClearAll = () => {
+    if (window.confirm('ลบข้อมูลทั้งหมด (Settings, Devices, Areas) ออกจาก localStorage?\nแอปจะรีโหลดและกลับสู่ค่าเริ่มต้น')) {
+      onClearAll?.()
+    }
+  }
+
+  const dotStyle  = MQTT_DOT_STYLE[mqttStatus]  ?? MQTT_DOT_STYLE.offline
+  const dotLabel  = MQTT_STATUS_LABEL[mqttStatus] ?? 'Unknown'
 
   return (
     <motion.div
@@ -51,7 +78,7 @@ export default function SettingsPage({ settings, onSave }) {
           <div>
             <div className="sh-eyebrow mono">SYSTEM · CONFIGURATION</div>
             <h1>Settings</h1>
-            <p className="sh-page-sub">ค่าต่างๆ ถูกบันทึกเป็น cookie ในเบราว์เซอร์</p>
+            <p className="sh-page-sub">ค่าต่างๆ ถูกบันทึกใน localStorage ของเบราว์เซอร์</p>
           </div>
           <div className="sh-settings-actions">
             <button className="sh-btn-ghost" onClick={() => { setS(settings); setDirty(false) }} disabled={!dirty}>
@@ -82,7 +109,7 @@ export default function SettingsPage({ settings, onSave }) {
             </div>
           </section>
 
-          {/* 02 LLM */}
+          {/* 02 Language Model */}
           <section className="sh-sect">
             <div className="sh-sect-head">
               <div className="sh-sect-num mono">02</div>
@@ -90,16 +117,29 @@ export default function SettingsPage({ settings, onSave }) {
             </div>
             <div className="sh-field">
               <label className="mono">API Endpoint</label>
-              <input value={s.endpoint} onChange={e => set('endpoint', e.target.value)} placeholder="https://api.opentyphoon.ai/v1" />
+              <input
+                value={s.endpoint}
+                onChange={e => set('endpoint', e.target.value)}
+                placeholder="https://api.opentyphoon.ai/v1"
+              />
             </div>
             <div className="sh-grid2">
               <div className="sh-field">
                 <label className="mono">API Key</label>
-                <input type="password" value={s.apiKey} onChange={e => set('apiKey', e.target.value)} placeholder="sk-•••••••••••••••••" />
+                <input
+                  type="password"
+                  value={s.apiKey}
+                  onChange={e => set('apiKey', e.target.value)}
+                  placeholder="sk-•••••••••••••••••"
+                />
               </div>
               <div className="sh-field">
                 <label className="mono">Model</label>
-                <input value={s.model || ''} onChange={e => set('model', e.target.value)} placeholder="typhoon-v2-70b-instruct" />
+                <input
+                  value={s.model || ''}
+                  onChange={e => set('model', e.target.value)}
+                  placeholder="typhoon-v2-70b-instruct"
+                />
               </div>
             </div>
             <div className="sh-field">
@@ -169,11 +209,11 @@ export default function SettingsPage({ settings, onSave }) {
             </div>
           </section>
 
-          {/* 04 MQTT */}
+          {/* 04 MQTT Broker */}
           <section className="sh-sect">
             <div className="sh-sect-head">
               <div className="sh-sect-num mono">04</div>
-              <div><h3>MQTT Broker</h3><p>Event bus สำหรับรับ/ส่งสัญญาณอุปกรณ์ แบบ real-time</p></div>
+              <div><h3>MQTT Broker</h3><p>Event bus สำหรับรับ/ส่งสัญญาณอุปกรณ์ แบบ real-time · QoS 2</p></div>
             </div>
             <div className="sh-grid2">
               <div className="sh-field">
@@ -190,8 +230,26 @@ export default function SettingsPage({ settings, onSave }) {
               <input value={s.mqtt.baseTopic || ''} onChange={e => setMq('baseTopic', e.target.value)} />
             </div>
             <div className="sh-status-row mono">
-              <span className="sh-dot-live" /> BROKER ONLINE · ws/8000 · real-time subscribed
+              <span
+                className="w-1.5 h-1.5 rounded-full inline-block flex-shrink-0"
+                style={dotStyle}
+              />
+              {dotLabel}
             </div>
+          </section>
+
+          {/* 05 Data */}
+          <section className="sh-sect">
+            <div className="sh-sect-head">
+              <div className="sh-sect-num mono">05</div>
+              <div>
+                <h3>Data</h3>
+                <p>จัดการข้อมูลที่บันทึกไว้ใน localStorage — Settings, Devices, Areas</p>
+              </div>
+            </div>
+            <button className="sh-card-remove" style={{ maxWidth: 220 }} onClick={handleClearAll}>
+              <Icon name="close" size={13} /> Clear all local data
+            </button>
           </section>
         </div>
       </div>

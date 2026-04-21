@@ -1,10 +1,18 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import Icon from './ui/Icon'
 
+const BROKER_LABEL = {
+  connecting:   'CONNECTING',
+  connected:    'ONLINE',
+  reconnecting: 'RECONNECTING',
+  error:        'ERROR',
+  offline:      'OFFLINE',
+}
+
 export default function Nav({
   page, setPage, activeCount, deviceCount,
   tweaks, onToggleTheme, onToggleTweaks, tweaksOpen,
-  profile, mobileOpen, onCloseMobile,
+  profile, mqttStatus = 'offline', mobileOpen, onCloseMobile,
 }) {
   const items = [
     { id: 'devices',  label: 'Devices',  icon: 'bulb',    badge: `${activeCount}/${deviceCount}` },
@@ -75,13 +83,15 @@ export default function Nav({
         <div className="sh-nav-status mono">
           <div className="sh-nav-status-row">
             <span>BROKER</span>
-            <span className="sh-live"><i />ONLINE</span>
+            {mqttStatus === 'connected'
+              ? <span className="sh-live"><i />{BROKER_LABEL.connected}</span>
+              : <span style={{ color: mqttStatus === 'error' ? 'oklch(0.65 0.22 25)' : 'var(--ink-xdim)' }}>
+                  {BROKER_LABEL[mqttStatus] ?? 'OFFLINE'}
+                </span>
+            }
           </div>
           <div className="sh-nav-status-row">
-            <span>LATENCY</span><span>42ms</span>
-          </div>
-          <div className="sh-nav-status-row">
-            <span>UPTIME</span><span>14d 06h</span>
+            <span>QoS</span><span>2 · exactly-once</span>
           </div>
         </div>
 
