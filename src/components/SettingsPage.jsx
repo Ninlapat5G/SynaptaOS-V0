@@ -19,7 +19,7 @@ const MQTT_DOT_STYLE = {
   offline:      { background: 'var(--ink-xdim)',        animation: 'none' },
 }
 
-export default function SettingsPage({ settings, onSave, mqttStatus = 'offline', onClearAll }) {
+export default function SettingsPage({ settings, onSave, mqttStatus = 'offline', onClearAll, onOpenQR }) {
   const [s, setS]       = useState(settings)
   const [dirty, setDirty] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -100,15 +100,9 @@ export default function SettingsPage({ settings, onSave, mqttStatus = 'offline',
               <div className="sh-sect-num mono">01</div>
               <div><h3>Profile</h3><p>ชื่อและบทบาทของผู้ใช้งาน</p></div>
             </div>
-            <div className="sh-grid2">
-              <div className="sh-field">
-                <label className="mono">Display Name</label>
-                <input value={s.profile?.name || ''} onChange={e => setPro('name', e.target.value)} placeholder="Your name" />
-              </div>
-              <div className="sh-field">
-                <label className="mono">Role</label>
-                <input value={s.profile?.role || ''} onChange={e => setPro('role', e.target.value)} placeholder="Owner" />
-              </div>
+            <div className="sh-field">
+              <label className="mono">Display Name</label>
+              <input value={s.profile?.name || ''} onChange={e => setPro('name', e.target.value)} placeholder="Your name" />
             </div>
           </section>
 
@@ -241,10 +235,37 @@ export default function SettingsPage({ settings, onSave, mqttStatus = 'offline',
             </div>
           </section>
 
-          {/* 05 Data */}
+          {/* 05 Share via QR */}
           <section className="sh-sect">
             <div className="sh-sect-head">
               <div className="sh-sect-num mono">05</div>
+              <div>
+                <h3>Share via QR</h3>
+                <p>สร้าง/อ่าน QR Code เพื่อย้าย config, devices หรือ skills ข้ามเครื่อง</p>
+              </div>
+            </div>
+            <div className="sh-qr-actions">
+              <button className="sh-qr-btn" onClick={() => onOpenQR?.('share')}>
+                <Icon name="qr" size={16} />
+                <div className="sh-qr-btn-meta">
+                  <div className="sh-qr-btn-title">สร้าง QR</div>
+                  <div className="sh-qr-btn-sub mono">เลือกสิ่งที่จะแชร์</div>
+                </div>
+              </button>
+              <button className="sh-qr-btn" onClick={() => onOpenQR?.('scan')}>
+                <Icon name="scan" size={16} />
+                <div className="sh-qr-btn-meta">
+                  <div className="sh-qr-btn-title">สแกน QR</div>
+                  <div className="sh-qr-btn-sub mono">เปิดกล้อง · import อัตโนมัติ</div>
+                </div>
+              </button>
+            </div>
+          </section>
+
+          {/* 06 Data */}
+          <section className="sh-sect">
+            <div className="sh-sect-head">
+              <div className="sh-sect-num mono">06</div>
               <div>
                 <h3>Data</h3>
                 <p>จัดการข้อมูลที่บันทึกไว้ใน localStorage — Settings, Devices, Areas</p>

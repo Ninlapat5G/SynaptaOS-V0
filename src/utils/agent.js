@@ -142,7 +142,7 @@ async function responderNode(state) {
   const systemPrompt = `${settings.systemPrompt}
 
 [User Info]
-Name: "${settings.profile?.name || 'User'}" · Role: ${settings.profile?.role || 'Guest'}
+Name: "${settings.profile?.name || 'User'}"
 
 [Current Home Status]
 ${stateSummary || 'No devices registered'}

@@ -107,7 +107,6 @@ export default function Nav({
             <div className="sh-user-av">{initials}</div>
             <div className="sh-user-meta">
               <div className="sh-user-name">{profile?.name || 'User'}</div>
-              <div className="sh-user-role mono">{(profile?.role || '').toUpperCase()}</div>
             </div>
           </div>
         </div>
