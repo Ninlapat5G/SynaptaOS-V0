@@ -1,8 +1,26 @@
 import { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { motion, useMotionValue, useTransform, animate } from 'framer-motion'
 import Icon from './ui/Icon'
 import Toggle from './ui/Toggle'
 import Slider from './ui/Slider'
+
+function AnimatedReadout({ value }) {
+  const mv = useMotionValue(value)
+  const display = useTransform(mv, v => String(Math.round(v)).padStart(3, '0'))
+  const pct     = useTransform(mv, v => `${Math.round((Math.round(v) / 255) * 100)}%`)
+
+  useEffect(() => {
+    const ctrl = animate(mv, value, { duration: 0.45, ease: [0.16, 1, 0.3, 1] })
+    return ctrl.stop
+  }, [value, mv])
+
+  return (
+    <div className="sh-card-readout">
+      <motion.span className="sh-card-val mono">{display}</motion.span>
+      <motion.span className="sh-card-unit mono">/ 255 · {pct}</motion.span>
+    </div>
+  )
+}
 
 export const cardVariants = {
   hidden:  { opacity: 0, y: 16, scale: 0.97 },
@@ -103,7 +121,6 @@ export default function DeviceCard({ device, onUpdate, onRemove, areas }) {
   useEffect(() => { if (!editing) return }, [editing])
 
   const isOn = device.type === 'digital' ? device.on : device.value > 0
-  const pct = device.type === 'analog' ? Math.round((device.value / 255) * 100) : null
 
   if (editing) {
     return (
@@ -145,10 +162,7 @@ export default function DeviceCard({ device, onUpdate, onRemove, areas }) {
 
       {device.type === 'analog' ? (
         <div className="sh-card-body">
-          <div className="sh-card-readout">
-            <span className="sh-card-val mono">{String(device.value).padStart(3, '0')}</span>
-            <span className="sh-card-unit mono">/ 255 · {pct}%</span>
-          </div>
+          <AnimatedReadout value={device.value} />
           <Slider
             value={device.value}
             onChange={(v, isFinal) => onUpdate({ ...device, value: v }, isFinal)}
