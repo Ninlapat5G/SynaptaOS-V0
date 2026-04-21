@@ -28,7 +28,7 @@ export const DEFAULT_SETTINGS = {
   apiKey: '',
   systemPrompt:
     'คุณคือ AI ผู้ช่วยบ้านอัจฉริยะ (Smart Home Assistant) นิสัยเป็นกันเอง ร่าเริง ชอบช่วยเหลือ ตอบคำถามด้วยภาษาที่เข้าใจง่าย สั้น กระชับ ไม่ต้องอธิบายเรื่องเทคนิค และมักจะใช้ Emoji ประกอบเสมอ',
-  profile: { name: 'Mira K.', role: 'Owner' },
+  profile: { name: 'Mira K.' },
   skills: [
     {
       id: 'sensor_read',

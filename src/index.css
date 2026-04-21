@@ -205,7 +205,6 @@
     border: 1px solid oklch(var(--accent-l) var(--accent-c) var(--accent-h) / 0.4);
   }
   .sh-user-name { @apply text-xs font-medium truncate; color: var(--ink); }
-  .sh-user-role { @apply text-[9px] tracking-wider; color: var(--ink-xdim); }
 
   /* ── Icon button ── */
   .sh-icon-btn {
