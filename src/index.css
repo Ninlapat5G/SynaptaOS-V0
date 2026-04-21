@@ -754,6 +754,237 @@
     border-color: oklch(0.72 0.15 160 / 0.3);
   }
 
+  /* ── Voice mic + lang toggle ── */
+  .sh-mic {
+    @apply w-10 h-10 rounded-xl flex items-center justify-center shrink-0 cursor-pointer
+           transition-all duration-150;
+    background: var(--bg-1);
+    border: 1px solid var(--line);
+    color: var(--ink-dim);
+  }
+  .sh-mic:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .sh-mic:disabled { opacity: 0.35; cursor: not-allowed; }
+  .sh-mic.on {
+    background: oklch(0.65 0.22 25 / 0.15);
+    border-color: oklch(0.65 0.22 25);
+    color: oklch(0.72 0.22 25);
+    animation: pulse-mic 1.2s ease-in-out infinite;
+  }
+  .sh-lang-toggle {
+    @apply px-2.5 h-10 rounded-xl text-[11px] font-semibold shrink-0 cursor-pointer
+           transition-all duration-150 tracking-wider;
+    background: var(--bg-1);
+    border: 1px solid var(--line);
+    color: var(--ink-dim);
+  }
+  .sh-lang-toggle:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .sh-voice-error {
+    @apply text-[11px] px-3 py-1.5 rounded-lg mb-2 flex items-center gap-1.5;
+    background: oklch(0.65 0.18 25 / 0.12);
+    border: 1px solid oklch(0.65 0.18 25 / 0.4);
+    color: oklch(0.72 0.18 25);
+  }
+
+  @keyframes pulse-mic {
+    0%, 100% { box-shadow: 0 0 0 0 oklch(0.65 0.22 25 / 0.5); }
+    50%       { box-shadow: 0 0 0 6px oklch(0.65 0.22 25 / 0); }
+  }
+
+  /* ── Modal ── */
+  .sh-modal-backdrop {
+    @apply fixed inset-0 z-50 flex items-center justify-center p-4;
+    background: oklch(0 0 0 / 0.6);
+    backdrop-filter: blur(4px);
+  }
+  .sh-modal {
+    @apply w-full rounded-2xl overflow-hidden flex flex-col;
+    max-width: 520px;
+    max-height: 92vh;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    box-shadow: 0 40px 80px oklch(0 0 0 / 0.4);
+  }
+  .sh-modal-head {
+    @apply flex items-center justify-between p-4 shrink-0;
+    border-bottom: 1px solid var(--line);
+  }
+  .sh-modal-head .sh-seg { max-width: 260px; }
+  .sh-modal-head .sh-seg button {
+    @apply flex items-center justify-center gap-1.5;
+  }
+  .sh-modal-body {
+    @apply p-5 flex flex-col gap-4 overflow-y-auto;
+  }
+  .sh-modal-hint { @apply text-xs m-0; color: var(--ink-dim); }
+
+  /* ── QR share UI ── */
+  .sh-qr-actions {
+    @apply grid gap-3 grid-cols-1 sm:grid-cols-2;
+  }
+  .sh-qr-btn {
+    @apply flex items-center gap-3 p-4 rounded-xl cursor-pointer transition-all duration-150 text-left;
+    background: var(--bg-1);
+    border: 1px solid var(--line);
+    color: var(--ink);
+  }
+  .sh-qr-btn:hover {
+    border-color: var(--accent);
+    background: var(--card);
+  }
+  .sh-qr-btn svg { color: var(--accent); }
+  .sh-qr-btn-meta { @apply flex-1 min-w-0; }
+  .sh-qr-btn-title { @apply text-sm font-medium; }
+  .sh-qr-btn-sub { @apply text-[10px] tracking-wider mt-0.5; color: var(--ink-xdim); }
+
+  .sh-qr-scopes {
+    @apply flex flex-col gap-1.5;
+  }
+  .sh-qr-scope {
+    @apply flex items-center gap-3 p-2.5 rounded-xl cursor-pointer transition-all duration-150 text-left;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--ink-dim);
+  }
+  .sh-qr-scope:hover { background: var(--bg-1); }
+  .sh-qr-scope.on {
+    background: oklch(var(--accent-l) var(--accent-c) var(--accent-h) / 0.08);
+    border-color: oklch(var(--accent-l) var(--accent-c) var(--accent-h) / 0.3);
+    color: var(--ink);
+  }
+  .sh-qr-scope.indent { margin-left: 24px; }
+  .sh-qr-check {
+    @apply w-5 h-5 rounded-md flex items-center justify-center shrink-0 transition-colors;
+    background: var(--bg-0);
+    border: 1px solid var(--line-strong);
+  }
+  .sh-qr-check.on {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: oklch(0.08 0.01 230);
+  }
+  .sh-qr-scope-meta { @apply flex-1 min-w-0; }
+  .sh-qr-scope-label { @apply text-sm; }
+  .sh-qr-scope-sub { @apply text-[10px] tracking-wider mt-0.5; color: var(--ink-xdim); }
+  .sh-qr-count { color: var(--ink-xdim); font-size: 10px; margin-left: 4px; }
+  .sh-danger { color: oklch(0.72 0.18 25); font-size: 10px; margin-left: 4px; }
+
+  .sh-qr-devices {
+    @apply mt-1 p-3 rounded-xl flex flex-col gap-2;
+    background: var(--bg-1);
+    border: 1px solid var(--line);
+  }
+  .sh-qr-devices-head { @apply flex items-center justify-between; }
+  .sh-qr-selectall {
+    @apply text-[10px] tracking-wider cursor-pointer transition-colors;
+    background: transparent;
+    border: none;
+    color: var(--accent);
+  }
+  .sh-qr-selectall:hover { filter: brightness(1.2); }
+  .sh-qr-devicelist {
+    @apply flex flex-wrap gap-1.5 max-h-32 overflow-y-auto;
+  }
+  .sh-qr-devicechip {
+    @apply text-[11px] px-2.5 py-1 rounded-full cursor-pointer transition-all duration-150;
+    background: var(--bg-0);
+    border: 1px solid var(--line);
+    color: var(--ink-dim);
+  }
+  .sh-qr-devicechip:hover { border-color: var(--accent); color: var(--ink); }
+  .sh-qr-devicechip.on {
+    background: oklch(var(--accent-l) var(--accent-c) var(--accent-h) / 0.15);
+    border-color: oklch(var(--accent-l) var(--accent-c) var(--accent-h) / 0.4);
+    color: var(--accent);
+  }
+
+  .sh-qr-display {
+    @apply flex flex-col items-center justify-center gap-3 p-4 rounded-xl;
+    background: var(--bg-0);
+    border: 1px dashed var(--line);
+    min-height: 180px;
+  }
+  .sh-qr-img {
+    @apply rounded-lg;
+    width: 200px; height: 200px;
+    background: white;
+    padding: 8px;
+  }
+  .sh-qr-display-meta { @apply text-[10px] text-center tracking-wider; color: var(--ink-xdim); }
+  .sh-qr-empty { @apply text-xs text-center; color: var(--ink-xdim); }
+  .sh-qr-error {
+    @apply text-xs px-3 py-2 rounded-lg flex items-center gap-2;
+    background: oklch(0.65 0.18 25 / 0.12);
+    border: 1px solid oklch(0.65 0.18 25 / 0.3);
+    color: oklch(0.72 0.18 25);
+  }
+
+  /* ── QR scan UI ── */
+  .sh-qr-scan {
+    @apply relative rounded-xl overflow-hidden;
+    aspect-ratio: 1;
+    background: oklch(0.05 0.01 230);
+    border: 1px solid var(--line);
+  }
+  .sh-qr-video {
+    @apply absolute inset-0 w-full h-full object-cover;
+  }
+  .sh-qr-scan-frame {
+    @apply absolute rounded-2xl pointer-events-none;
+    inset: 14%;
+    border: 2px solid oklch(1 0 0 / 0.3);
+    box-shadow: 0 0 0 2000px oklch(0 0 0 / 0.35);
+  }
+  .sh-qr-scan-frame.active {
+    border-color: var(--accent);
+    box-shadow:
+      0 0 0 2000px oklch(0 0 0 / 0.3),
+      0 0 20px var(--accent-glow);
+    animation: pulse-scan 2s ease-in-out infinite;
+  }
+  .sh-qr-scan-status {
+    @apply absolute bottom-3 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-full
+           text-[10px] tracking-wider whitespace-nowrap;
+    background: oklch(0 0 0 / 0.7);
+    color: white;
+    backdrop-filter: blur(6px);
+  }
+  .sh-qr-scan-status.error {
+    background: oklch(0.55 0.18 25 / 0.9);
+    max-width: 92%;
+    white-space: normal;
+    text-align: center;
+  }
+  .sh-qr-scan-status.done { background: var(--accent); color: oklch(0.08 0.01 230); }
+
+  @keyframes pulse-scan {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.55; }
+  }
+
+  /* ── Toast ── */
+  .sh-toast {
+    @apply fixed bottom-6 left-1/2 -translate-x-1/2 z-[60]
+           flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm max-w-[calc(100vw-32px)];
+    background: var(--panel);
+    border: 1px solid var(--line);
+    box-shadow: 0 20px 40px oklch(0 0 0 / 0.25);
+    color: var(--ink);
+  }
+  .sh-toast.ok    { border-color: var(--accent); }
+  .sh-toast.ok svg { color: var(--accent); }
+  .sh-toast.error { border-color: oklch(0.65 0.18 25); }
+  .sh-toast.error svg { color: oklch(0.72 0.18 25); }
+
+  @media (max-width: 768px) {
+    .sh-toast { bottom: 80px; }
+  }
+
   /* ── Tweaks panel ── */
   .sh-tweaks {
     @apply fixed bottom-6 right-6 w-64 rounded-2xl p-4 flex flex-col gap-3 z-50;
