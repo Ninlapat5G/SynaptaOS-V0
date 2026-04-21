@@ -1,53 +1,43 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 
-export default function Slider({ value, onChange }) {
-  const trackRef = useRef(null)
+export default function Slider({ value, onChange, max = 255 }) {
+  const trackRef  = useRef(null)
   const [dragging, setDragging] = useState(false)
 
-  const setFromEvent = useCallback(
-    e => {
-      const el = trackRef.current
-      if (!el) return
-      const rect = el.getBoundingClientRect()
-      const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left
-      onChange(Math.round(Math.max(0, Math.min(1, x / rect.width)) * 255), false)
-    },
-    [onChange],
-  )
+  const valueAt = useCallback(e => {
+    const el = trackRef.current
+    if (!el) return 0
+    const rect    = el.getBoundingClientRect()
+    const clientX = e.touches?.[0]?.clientX ?? e.changedTouches?.[0]?.clientX ?? e.clientX
+    return Math.round(Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) * max)
+  }, [max])
 
   useEffect(() => {
     if (!dragging) return
-    const move = e => { e.preventDefault(); setFromEvent(e) }
-    const up = e => {
-      setDragging(false)
-      const el = trackRef.current
-      if (!el) return
-      const rect = el.getBoundingClientRect()
-      const x = (e.changedTouches ? e.changedTouches[0].clientX : e.clientX) - rect.left
-      onChange(Math.round(Math.max(0, Math.min(1, x / rect.width)) * 255), true)
-    }
-    window.addEventListener('mousemove', move)
-    window.addEventListener('mouseup', up)
-    window.addEventListener('touchmove', move, { passive: false })
-    window.addEventListener('touchend', up)
+    const move = e => { e.preventDefault(); onChange(valueAt(e), false) }
+    const up   = e => { setDragging(false); onChange(valueAt(e), true) }
+    window.addEventListener('mousemove',  move)
+    window.addEventListener('mouseup',    up)
+    window.addEventListener('touchmove',  move, { passive: false })
+    window.addEventListener('touchend',   up)
     return () => {
-      window.removeEventListener('mousemove', move)
-      window.removeEventListener('mouseup', up)
-      window.removeEventListener('touchmove', move)
-      window.removeEventListener('touchend', up)
+      window.removeEventListener('mousemove',  move)
+      window.removeEventListener('mouseup',    up)
+      window.removeEventListener('touchmove',  move)
+      window.removeEventListener('touchend',   up)
     }
-  }, [dragging, setFromEvent, onChange])
+  }, [dragging, onChange, valueAt])
 
-  const pct = (value / 255) * 100
+  const pct = (value / max) * 100
 
   return (
     <div className={`sh-slider ${dragging ? 'dragging' : ''}`}>
       <div
         className="sh-slider-track"
         ref={trackRef}
-        onMouseDown={e => { setDragging(true); setFromEvent(e) }}
-        onTouchStart={e => { setDragging(true); setFromEvent(e) }}
+        onMouseDown={e => { setDragging(true); onChange(valueAt(e), false) }}
+        onTouchStart={e => { setDragging(true); onChange(valueAt(e), false) }}
       >
         <div className="sh-slider-ticks">
           {Array.from({ length: 32 }).map((_, i) => (

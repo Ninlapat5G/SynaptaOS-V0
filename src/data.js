@@ -15,6 +15,7 @@ export const initialDevices = [
     name: 'Ceiling Dimmer',
     type: 'analog',
     value: 128,
+    max: 255,
     icon: 'bulb',
     pubTopic: 'Mylab/smarthome/living-room/liv-dim/set',
     subTopic: 'Mylab/smarthome/living-room/liv-dim/state',

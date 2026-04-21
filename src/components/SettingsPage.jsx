@@ -251,7 +251,7 @@ export default function SettingsPage({ settings, onSave, mqttStatus = 'offline',
               </div>
             </div>
             <button className="sh-card-remove" style={{ maxWidth: 220 }} onClick={handleClearAll}>
-              <Icon name="close" size={13} /> Clear all local data
+              Clear all local data
             </button>
           </section>
         </div>

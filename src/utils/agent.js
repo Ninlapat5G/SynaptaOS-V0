@@ -89,7 +89,7 @@ async function routerNode(state) {
 RULES:
 1. mqtt_publish: use the EXACT pubTopic from the device list — never shorten or invent topics.
 2. Digital payload: exactly "true" or "false".
-3. Analog payload: number string "0"–"255".
+3. Analog payload: number string from "0" to the device's max value (see "max" field, default 255, may be 1023).
 4. If no device action needed: respond "NO_TOOL_NEEDED" with no tool calls.
 5. No conversational text — only tool calls or "NO_TOOL_NEEDED".
 

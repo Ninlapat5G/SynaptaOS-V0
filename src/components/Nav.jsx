@@ -45,7 +45,7 @@ export default function Nav({
           </div>
           <div>
             <div className="sh-brand-name">AIoT</div>
-            <div className="sh-brand-sub mono">Synapta UI 0.1</div>
+            <div className="sh-brand-sub mono">Synapta Tech</div>
           </div>
         </div>
 

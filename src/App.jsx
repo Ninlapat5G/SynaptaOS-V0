@@ -106,7 +106,7 @@ export default function App() {
                           (topic === fullPub || topic === d.pubTopic)
           if (!matched) return d
           if (d.type === 'digital') return { ...d, on: val === 'true' || val === '1' || val === 'on' || val === 'ON' }
-          if (d.type === 'analog')  return { ...d, value: parseInt(val, 10) || 0 }
+          if (d.type === 'analog')  return { ...d, value: Math.max(0, Math.min(d.max ?? 255, parseInt(val, 10) || 0)) }
           return d
         }))
       })

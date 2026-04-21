@@ -4,8 +4,8 @@ import Icon from './ui/Icon'
 import Toggle from './ui/Toggle'
 import Slider from './ui/Slider'
 
-function AnimatedReadout({ value }) {
-  const mv      = useMotionValue(value)
+function AnimatedReadout({ value, max = 255 }) {
+  const mv          = useMotionValue(value)
   const [num, setNum] = useState(value)
 
   useEffect(() => {
@@ -17,10 +17,12 @@ function AnimatedReadout({ value }) {
     return () => ctrl.stop()
   }, [value, mv])
 
+  const pad = max > 255 ? 4 : 3
+
   return (
     <div className="sh-card-readout">
-      <span className="sh-card-val mono">{String(num).padStart(3, '0')}</span>
-      <span className="sh-card-unit mono">/ 255 · {Math.round((num / 255) * 100)}%</span>
+      <span className="sh-card-val mono">{String(num).padStart(pad, '0')}</span>
+      <span className="sh-card-unit mono">/ {max} · {Math.round((num / max) * 100)}%</span>
     </div>
   )
 }
@@ -30,8 +32,11 @@ export const cardVariants = {
   visible: { opacity: 1, y: 0,  scale: 1 },
 }
 
+const MAX_OPTIONS = [255, 1023]
+
 function EditCard({ device, onUpdate, onRemove, areas, onCancel }) {
   const [draft, setDraft] = useState(device)
+  const set = patch => setDraft(d => ({ ...d, ...patch }))
 
   return (
     <motion.div
@@ -49,11 +54,11 @@ function EditCard({ device, onUpdate, onRemove, areas, onCancel }) {
       <div className="sh-card-edit-body">
         <label className="sh-field">
           <span className="mono">NAME</span>
-          <input value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} />
+          <input value={draft.name} onChange={e => set({ name: e.target.value })} />
         </label>
         <label className="sh-field">
           <span className="mono">AREA</span>
-          <select value={draft.room} onChange={e => setDraft({ ...draft, room: e.target.value })}>
+          <select value={draft.room} onChange={e => set({ room: e.target.value })}>
             {[...new Set([draft.room, ...(areas || [])])].map(a => (
               <option key={a}>{a}</option>
             ))}
@@ -66,19 +71,33 @@ function EditCard({ device, onUpdate, onRemove, areas, onCancel }) {
               <button
                 key={t} type="button"
                 className={draft.type === t ? 'on' : ''}
-                onClick={() =>
-                  setDraft({
-                    ...draft,
-                    type: t,
-                    ...(t === 'analog' ? { value: draft.value ?? 128 } : { on: draft.on ?? false }),
-                  })
-                }
+                onClick={() => set(
+                  t === 'analog'
+                    ? { type: t, value: draft.value ?? 128, max: draft.max ?? 255 }
+                    : { type: t, on: draft.on ?? false },
+                )}
               >
                 {t}
               </button>
             ))}
           </div>
         </label>
+        {draft.type === 'analog' && (
+          <label className="sh-field">
+            <span className="mono">MAX VALUE</span>
+            <div className="sh-seg flex">
+              {MAX_OPTIONS.map(m => (
+                <button
+                  key={m} type="button"
+                  className={(draft.max ?? 255) === m ? 'on' : ''}
+                  onClick={() => set({ max: m, value: Math.min(draft.value ?? 0, m) })}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+          </label>
+        )}
         <div className="sh-field">
           <span className="mono flex justify-between">
             MQTT TOPIC SUFFIX
@@ -89,7 +108,7 @@ function EditCard({ device, onUpdate, onRemove, areas, onCancel }) {
               <span className="sh-topic-tag mono">PUB</span>
               <input
                 value={draft.pubTopic || ''}
-                onChange={e => setDraft({ ...draft, pubTopic: e.target.value })}
+                onChange={e => set({ pubTopic: e.target.value })}
                 placeholder={`${draft.room.toLowerCase().replace(/\s+/g, '-')}/${draft.id}/set`}
               />
             </div>
@@ -97,7 +116,7 @@ function EditCard({ device, onUpdate, onRemove, areas, onCancel }) {
               <span className="sh-topic-tag sub mono">SUB</span>
               <input
                 value={draft.subTopic || ''}
-                onChange={e => setDraft({ ...draft, subTopic: e.target.value })}
+                onChange={e => set({ subTopic: e.target.value })}
                 placeholder={`${draft.room.toLowerCase().replace(/\s+/g, '-')}/${draft.id}/state`}
               />
             </div>
@@ -108,10 +127,7 @@ function EditCard({ device, onUpdate, onRemove, areas, onCancel }) {
         <button className="sh-card-remove" onClick={() => onRemove(device.id)}>Remove</button>
         <div className="flex-1" />
         <button className="sh-btn-ghost" onClick={onCancel}>Cancel</button>
-        <button
-          className="sh-btn-primary"
-          onClick={() => { onUpdate(draft); onCancel() }}
-        >
+        <button className="sh-btn-primary" onClick={() => { onUpdate(draft); onCancel() }}>
           Save
         </button>
       </div>
@@ -121,8 +137,7 @@ function EditCard({ device, onUpdate, onRemove, areas, onCancel }) {
 
 export default function DeviceCard({ device, onUpdate, onRemove, areas }) {
   const [editing, setEditing] = useState(false)
-  useEffect(() => { if (!editing) return }, [editing])
-
+  const max  = device.max ?? 255
   const isOn = device.type === 'digital' ? device.on : device.value > 0
 
   if (editing) {
@@ -165,9 +180,10 @@ export default function DeviceCard({ device, onUpdate, onRemove, areas }) {
 
       {device.type === 'analog' ? (
         <div className="sh-card-body">
-          <AnimatedReadout value={device.value} />
+          <AnimatedReadout value={device.value} max={max} />
           <Slider
             value={device.value}
+            max={max}
             onChange={(v, isFinal) => onUpdate({ ...device, value: v }, isFinal)}
           />
         </div>
