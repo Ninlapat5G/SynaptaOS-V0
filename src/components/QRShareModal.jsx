@@ -108,7 +108,7 @@ function ShareTab({ settings, devices, tweaks }) {
       <p className="sh-modal-hint">เลือกสิ่งที่จะแชร์ ระบบจะสร้าง QR ให้ผู้อื่นสแกนเพื่อ import</p>
 
       <div className="sh-qr-scopes">
-        <ScopeRow label="Profile"      checked={scopes.profile}   onClick={() => toggle('profile')}   sub="ชื่อ, role" />
+        <ScopeRow label="Profile"      checked={scopes.profile}   onClick={() => toggle('profile')}   sub="ชื่อผู้ใช้" />
         <ScopeRow label="LLM Config"   checked={scopes.llmConfig} onClick={() => toggle('llmConfig')} sub="endpoint, model, system prompt" />
         {scopes.llmConfig && (
           <ScopeRow
