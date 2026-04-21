@@ -773,17 +773,6 @@
     color: oklch(0.72 0.22 25);
     animation: pulse-mic 1.2s ease-in-out infinite;
   }
-  .sh-lang-toggle {
-    @apply px-2.5 h-10 rounded-xl text-[11px] font-semibold shrink-0 cursor-pointer
-           transition-all duration-150 tracking-wider;
-    background: var(--bg-1);
-    border: 1px solid var(--line);
-    color: var(--ink-dim);
-  }
-  .sh-lang-toggle:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
   .sh-voice-error {
     @apply text-[11px] px-3 py-1.5 rounded-lg mb-2 flex items-center gap-1.5;
     background: oklch(0.65 0.18 25 / 0.12);

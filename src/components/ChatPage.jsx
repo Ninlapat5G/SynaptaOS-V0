@@ -5,16 +5,15 @@ import ChatBubble, { TypingBubble } from './chat/ChatBubble'
 import ToolPill from './chat/ToolPill'
 import { createRecognizer, isSpeechSupported } from '../utils/speech'
 
-const LANG_OPTIONS = [
-  { code: 'th-TH', label: 'TH' },
-  { code: 'en-US', label: 'EN' },
-]
+const detectVoiceLang = () => {
+  const nav = typeof navigator !== 'undefined' ? (navigator.language || '') : ''
+  return nav.toLowerCase().startsWith('en') ? 'en-US' : 'th-TH'
+}
 
 export default function ChatPage({
   messages, onSend, thinking, executing, onClear, modelName, skillCount, msgCount,
 }) {
   const [draft, setDraft] = useState('')
-  const [lang, setLang] = useState(() => localStorage.getItem('sh-voice-lang') || 'th-TH')
   const [listening, setListening] = useState(false)
   const [voiceError, setVoiceError] = useState(null)
   const scrollRef = useRef(null)
@@ -25,8 +24,6 @@ export default function ChatPage({
     const el = scrollRef.current
     if (el) el.scrollTop = el.scrollHeight
   }, [messages, thinking, executing])
-
-  useEffect(() => { localStorage.setItem('sh-voice-lang', lang) }, [lang])
 
   useEffect(() => () => recogRef.current?.abort(), [])
 
@@ -43,7 +40,7 @@ export default function ChatPage({
     }
     draftBeforeVoice.current = draft ? draft + ' ' : ''
     const rec = createRecognizer({
-      lang,
+      lang: detectVoiceLang(),
       onResult: (text) => setDraft(draftBeforeVoice.current + text),
       onEnd:    (finalText) => {
         setListening(false)
@@ -69,14 +66,6 @@ export default function ChatPage({
     setListening(true)
   }
 
-  const cycleLang = () => {
-    const idx = LANG_OPTIONS.findIndex(l => l.code === lang)
-    const next = LANG_OPTIONS[(idx + 1) % LANG_OPTIONS.length]
-    setLang(next.code)
-    if (listening) { recogRef.current?.abort(); setListening(false) }
-  }
-
-  const currentLang = LANG_OPTIONS.find(l => l.code === lang) || LANG_OPTIONS[0]
   const busy = thinking || !!executing
 
   return (
@@ -172,18 +161,10 @@ export default function ChatPage({
               disabled={busy}
               whileTap={{ scale: 0.9 }}
               whileHover={{ scale: 1.05 }}
-              title={listening ? 'หยุดฟัง' : `พูดภาษา${currentLang.label}`}
+              title={listening ? 'หยุดฟัง' : 'พูดใส่ไมค์'}
             >
               <Icon name={listening ? 'micOff' : 'mic'} size={15} />
             </motion.button>
-            <button
-              type="button"
-              className="sh-lang-toggle mono"
-              onClick={cycleLang}
-              title="สลับภาษาเสียง"
-            >
-              {currentLang.label}
-            </button>
             <motion.button
               type="submit"
               className="sh-send"
