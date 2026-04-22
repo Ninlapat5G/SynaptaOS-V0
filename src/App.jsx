@@ -1,9 +1,10 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 
 import { initialDevices, DEFAULT_SETTINGS, INITIAL_AREAS, INITIAL_TWEAKS } from './data'
 import { saveSettings, loadSettings, saveDevices, loadDevices, saveAreas, loadAreas, clearAll } from './utils/storage'
 import { decodePayload, applyPayload } from './utils/qrshare'
+import { normalizeBase, buildFullTopic } from './utils/mqttTopic'
 import { useMQTT } from './hooks/useMQTT'
 import { useChat } from './hooks/useChat'
 
@@ -66,31 +67,23 @@ export default function App() {
   const baseTopicRef = useRef(settings.mqtt.baseTopic)
   useEffect(() => { baseTopicRef.current = settings.mqtt.baseTopic }, [settings.mqtt.baseTopic])
 
-  // ── MQTT message sync (STRICT MATCHING ONLY) ──────────────────────────────────
+  // ── MQTT message sync ─────────────────────────────────────────────────────────
   const handleMqttMessage = useCallback((topic, val) => {
-    const base = (baseTopicRef.current || '').trim().replace(/\/+$/, '')
+    const base = normalizeBase(baseTopicRef.current)
     const incoming = topic.trim()
 
-    setDevices(prev => prev.map(d => {
-      let sub = (d.subTopic || '').trim().replace(/^\/+/, '')
-      let pub = (d.pubTopic || '').trim().replace(/^\/+/, '')
-
-      // Normalize: strip baseTopic prefix if user accidentally included it
-      if (base) {
-        const prefix = base + '/'
-        if (sub.startsWith(prefix)) sub = sub.slice(prefix.length)
-        if (pub.startsWith(prefix)) pub = pub.slice(prefix.length)
-      }
-
-      const expectedSub = base ? `${base}/${sub}` : sub
-      const expectedPub = base ? `${base}/${pub}` : pub
-
-      if (incoming !== expectedSub && incoming !== expectedPub) return d
-
-      if (d.type === 'digital') return { ...d, on: val === 'true' || val === '1' || val === 'on' || val === 'ON' }
-      if (d.type === 'analog') return { ...d, value: Math.max(0, Math.min(d.max ?? 255, parseInt(val, 10) || 0)) }
-      return d
-    }))
+    setDevices(prev => {
+      let matched = false
+      const next = prev.map(d => {
+        if (incoming !== buildFullTopic(d.subTopic, base) &&
+            incoming !== buildFullTopic(d.pubTopic, base)) return d
+        matched = true
+        if (d.type === 'digital') return { ...d, on: val === 'true' || val === '1' || val === 'on' || val === 'ON' }
+        if (d.type === 'analog') return { ...d, value: Math.max(0, Math.min(d.max ?? 255, parseInt(val, 10) || 0)) }
+        return d
+      })
+      return matched ? next : prev
+    })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -125,10 +118,8 @@ export default function App() {
       const rawTopic = device ? device.pubTopic : topic
 
       return new Promise(resolve => {
-        const base = (baseTopicRef.current || '').trim().replace(/\/+$/, '')
-        let clean = rawTopic.trim().replace(/^\/+/, '')
-        if (base && clean.startsWith(base + '/')) clean = clean.slice(base.length + 1)
-        const fullTopic = base ? `${base}/${clean}` : clean
+        const base = normalizeBase(baseTopicRef.current)
+        const fullTopic = buildFullTopic(rawTopic, base)
 
         mqttClient.publish(fullTopic, String(payload), { qos: 2 }, err => {
           if (err) { resolve({ success: false, error: err.message }); return }
@@ -148,8 +139,8 @@ export default function App() {
     if (name === 'mqtt_read') {
       const topic = typeof args === 'string' ? args.trim() : args?.topic
       if (!topic) return { success: false, error: 'No topic specified' }
-      const base = (baseTopicRef.current || '').trim().replace(/\/+$/, '')
-      const fullTopic = topic.startsWith(base) ? topic : `${base}/${topic}`.replace(/\/\/+/g, '/')
+      const base = normalizeBase(baseTopicRef.current)
+      const fullTopic = buildFullTopic(topic, base)
       const val = sensorCache[fullTopic]
       if (val !== undefined) return { success: true, topic: fullTopic, value: val }
       return { success: false, note: `No data cached for topic: ${fullTopic}` }

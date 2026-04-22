@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import mqtt from 'mqtt'
+import { normalizeBase, buildFullTopic } from '../utils/mqttTopic'
 
 export function useMQTT({ broker, baseTopic, onMessage }) {
   const [client, setClient] = useState(null)
@@ -26,8 +27,8 @@ export function useMQTT({ broker, baseTopic, onMessage }) {
       c.on('connect', () => {
         setStatus('connected')
         setClient(c)
-        const subTopic = baseTopic ? `${baseTopic}/#`.replace(/\/\/+/g, '/') : '#'
-        c.subscribe(subTopic, { qos: 2 })
+        const base = normalizeBase(baseTopic)
+        c.subscribe(base ? `${base}/#` : '#', { qos: 2 })
       })
       c.on('reconnect', () => setStatus('reconnecting'))
       c.on('error', () => setStatus('error'))
@@ -36,7 +37,7 @@ export function useMQTT({ broker, baseTopic, onMessage }) {
 
       c.on('message', (topic, message) => {
         const val = message.toString()
-        setSensorCache(prev => ({ ...prev, [topic]: val }))
+        setSensorCache(prev => prev[topic] === val ? prev : { ...prev, [topic]: val })
         onMessageRef.current?.(topic, val)
       })
     } catch {
@@ -50,11 +51,8 @@ export function useMQTT({ broker, baseTopic, onMessage }) {
 
   const publish = useCallback((topic, payload, opts = {}) => {
     if (!client) return null
-    const base = (baseTopic || '').trim().replace(/\/+$/, '')
-    let sub = topic.trim().replace(/^\/+/, '')
-    // Strip baseTopic prefix if user accidentally included it in the topic
-    if (base && sub.startsWith(base + '/')) sub = sub.slice(base.length + 1)
-    const fullTopic = base ? `${base}/${sub}` : sub
+    const base = normalizeBase(baseTopic)
+    const fullTopic = buildFullTopic(topic, base)
     client.publish(fullTopic, String(payload), { qos: 2, ...opts })
     return fullTopic
   }, [client, baseTopic])
