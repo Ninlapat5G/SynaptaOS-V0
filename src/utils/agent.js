@@ -131,21 +131,25 @@ async function responderNode(state) {
   const { text, settings, apiHistory, toolResults = [], deviceList, onStream } = state
   const llm = createLLMClient(settings)
 
-  const stateSummary = (deviceList || [])
-    .map(d => `- [${d.room}] ${d.name} (${d.type}): ${d.type === 'digital' ? (d.on ? 'ON' : 'OFF') : d.value}`)
-    .join('\n')
-
   const toolContext = toolResults.length
     ? toolResults.map(t => `Tool ${t.name}: ${JSON.stringify(t.result)}`).join('\n')
     : 'None — no tools were called'
 
+  // Inject home state only when tools ran — prevents AI from volunteering
+  // device info unprompted during casual conversation.
+  const stateSummary = toolResults.length
+    ? (deviceList || [])
+        .map(d => `- [${d.room}] ${d.name} (${d.type}): ${d.type === 'digital' ? (d.on ? 'ON' : 'OFF') : d.value}`)
+        .join('\n') || 'No devices registered'
+    : null
+
   const systemPrompt = `${settings.systemPrompt}
 
 [User Info]
-Name: "${settings.profile?.name || 'User'}"
+Name: "${settings.profile?.name || 'User'}"${stateSummary ? `
 
 [Current Home Status]
-${stateSummary || 'No devices registered'}
+${stateSummary}` : ''}
 
 [Tool Execution Results]
 ${toolContext}`
