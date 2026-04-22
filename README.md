@@ -73,6 +73,7 @@ src/
 │   └── useChat.js            # Chat messages, agent loop, streaming
 ├── utils/
 │   ├── agent.js              # Mini graph engine + LLM client (streaming)
+│   ├── mqttTopic.js          # normalizeBase / buildFullTopic helpers
 │   ├── qrshare.js            # QR payload: encode/decode/apply + pattern check
 │   └── storage.js            # localStorage helpers
 └── components/
@@ -85,7 +86,7 @@ src/
     │   └── ToolPill.jsx      # แสดง tool call + ผลลัพธ์
     ├── ErrorBoundary.jsx     # React Error Boundary ครอบทุก page
     ├── Nav.jsx
-    ├── DeviceCard.jsx        # React.memo + topic validation + pending state
+    ├── DeviceCard.jsx        # React.memo + topic validation
     ├── ChatPage.jsx          # AI Chat + Voice input
     ├── SettingsPage.jsx      # 6 sections
     ├── QRShareModal.jsx      # สร้าง/สแกน QR + file upload + validation popup
@@ -291,6 +292,7 @@ Broker: `wss://broker.hivemq.com:8884/mqtt` (public, ไม่ต้อง login
 Base Topic: `Mylab/smarthome`
 
 Topic ของ device จะเป็น **suffix ต่อจาก Base Topic** เสมอ ระบบจะเชื่อมให้อัตโนมัติ
+ถ้าใส่ full path (รวม Base Topic) ในช่อง topic ของ widget ระบบจะ normalize ให้ถูกต้องเองโดยอัตโนมัติ
 
 | Device | PUB Topic (suffix) | SUB Topic (suffix) |
 |---|---|---|
