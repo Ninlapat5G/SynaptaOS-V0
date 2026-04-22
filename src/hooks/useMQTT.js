@@ -51,7 +51,9 @@ export function useMQTT({ broker, baseTopic, onMessage }) {
   const publish = useCallback((topic, payload, opts = {}) => {
     if (!client) return null
     const base = (baseTopic || '').trim().replace(/\/+$/, '')
-    const sub = topic.trim().replace(/^\/+/, '')
+    let sub = topic.trim().replace(/^\/+/, '')
+    // Strip baseTopic prefix if user accidentally included it in the topic
+    if (base && sub.startsWith(base + '/')) sub = sub.slice(base.length + 1)
     const fullTopic = base ? `${base}/${sub}` : sub
     client.publish(fullTopic, String(payload), { qos: 2, ...opts })
     return fullTopic

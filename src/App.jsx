@@ -62,16 +62,26 @@ export default function App() {
   const [newArea, setNewArea] = useState('')
   useEffect(() => { saveAreas(areas) }, [areas])
 
+  // ── MQTT baseTopic ref (always-fresh, avoids stale closure) ──────────────────
+  const baseTopicRef = useRef(settings.mqtt.baseTopic)
+  useEffect(() => { baseTopicRef.current = settings.mqtt.baseTopic }, [settings.mqtt.baseTopic])
+
   // ── MQTT message sync (STRICT MATCHING ONLY) ──────────────────────────────────
   const handleMqttMessage = useCallback((topic, val) => {
-    const base = (settings.mqtt.baseTopic || '').trim().replace(/\/+$/, '')
+    const base = (baseTopicRef.current || '').trim().replace(/\/+$/, '')
     const incoming = topic.trim()
 
     setDevices(prev => prev.map(d => {
-      const sub = (d.subTopic || '').trim().replace(/^\/+/, '')
-      const pub = (d.pubTopic || '').trim().replace(/^\/+/, '')
+      let sub = (d.subTopic || '').trim().replace(/^\/+/, '')
+      let pub = (d.pubTopic || '').trim().replace(/^\/+/, '')
 
-      // Strict matching: บังคับโครงสร้าง Base + Topic เท่านั้น
+      // Normalize: strip baseTopic prefix if user accidentally included it
+      if (base) {
+        const prefix = base + '/'
+        if (sub.startsWith(prefix)) sub = sub.slice(prefix.length)
+        if (pub.startsWith(prefix)) pub = pub.slice(prefix.length)
+      }
+
       const expectedSub = base ? `${base}/${sub}` : sub
       const expectedPub = base ? `${base}/${pub}` : pub
 
@@ -81,7 +91,8 @@ export default function App() {
       if (d.type === 'analog') return { ...d, value: Math.max(0, Math.min(d.max ?? 255, parseInt(val, 10) || 0)) }
       return d
     }))
-  }, [settings.mqtt.baseTopic])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // ── MQTT hook ─────────────────────────────────────────────────────────────────
   const { client: mqttClient, status: mqttStatus, sensorCache, publish: mqttPublish } = useMQTT({
@@ -114,8 +125,9 @@ export default function App() {
       const rawTopic = device ? device.pubTopic : topic
 
       return new Promise(resolve => {
-        const base = (settings.mqtt.baseTopic || '').trim().replace(/\/+$/, '')
-        const clean = rawTopic.trim().replace(/^\/+/, '')
+        const base = (baseTopicRef.current || '').trim().replace(/\/+$/, '')
+        let clean = rawTopic.trim().replace(/^\/+/, '')
+        if (base && clean.startsWith(base + '/')) clean = clean.slice(base.length + 1)
         const fullTopic = base ? `${base}/${clean}` : clean
 
         mqttClient.publish(fullTopic, String(payload), { qos: 2 }, err => {
@@ -136,7 +148,7 @@ export default function App() {
     if (name === 'mqtt_read') {
       const topic = typeof args === 'string' ? args.trim() : args?.topic
       if (!topic) return { success: false, error: 'No topic specified' }
-      const base = (settings.mqtt.baseTopic || '').trim().replace(/\/+$/, '')
+      const base = (baseTopicRef.current || '').trim().replace(/\/+$/, '')
       const fullTopic = topic.startsWith(base) ? topic : `${base}/${topic}`.replace(/\/\/+/g, '/')
       const val = sensorCache[fullTopic]
       if (val !== undefined) return { success: true, topic: fullTopic, value: val }
@@ -144,7 +156,7 @@ export default function App() {
     }
 
     return { success: false, error: `Unknown tool: ${name}` }
-  }, [mqttClient, sensorCache, settings.mqtt.baseTopic])
+  }, [mqttClient, sensorCache])
 
   // ── Chat hook ─────────────────────────────────────────────────────────────────
   const { messages, thinking, executing, sendMessage, clearChat } = useChat({
