@@ -65,18 +65,17 @@ export default function App() {
   // ── MQTT message sync (STRICT MATCHING ONLY) ──────────────────────────────────
   const handleMqttMessage = useCallback((topic, val) => {
     const base = (settings.mqtt.baseTopic || '').trim().replace(/^\/+|\/+$/g, '')
-    const cleanIncoming = topic.trim().replace(/^\/+|\/+$/g, '')
+    const incoming = topic.trim().replace(/^\/+|\/+$/g, '')
 
     setDevices(prev => prev.map(d => {
       const sub = (d.subTopic || '').trim().replace(/^\/+|\/+$/g, '')
       const pub = (d.pubTopic || '').trim().replace(/^\/+|\/+$/g, '')
 
-      // Strict matching logic: บังคับโครงสร้าง Base + Topic เท่านั้น
-      const targetSub = base ? `${base}/${sub}`.replace(/\/\/+/g, '/') : sub
-      const targetPub = base ? `${base}/${pub}`.replace(/\/\/+/g, '/') : pub
+      // Strict: บังคับโครงสร้าง Base + Topic เท่านั้น ไม่มีการแอบเช็ค startsWith
+      const expectedSub = base ? `${base}/${sub}`.replace(/\/\/+/g, '/') : sub
+      const expectedPub = base ? `${base}/${pub}`.replace(/\/\/+/g, '/') : pub
 
-      // เช็คเฉพาะ Target ที่คำนวณมาได้เท่านั้น ไม่เช็คค่าดิบจาก Widget
-      if (cleanIncoming !== targetSub && cleanIncoming !== targetPub) return d
+      if (incoming !== expectedSub && incoming !== expectedPub) return d
 
       if (d.type === 'digital') return { ...d, on: val === 'true' || val === '1' || val === 'on' || val === 'ON' }
       if (d.type === 'analog') return { ...d, value: Math.max(0, Math.min(d.max ?? 255, parseInt(val, 10) || 0)) }
@@ -84,7 +83,6 @@ export default function App() {
     }))
   }, [settings.mqtt.baseTopic])
 
-  // ── Subscribe Topics ─────────────────────────────────────────────────────────
   const subscribeTopics = useMemo(() => {
     const list = new Set()
     const base = (settings.mqtt.baseTopic || '').trim().replace(/^\/+|\/+$/g, '')
@@ -106,7 +104,7 @@ export default function App() {
     onMessage: handleMqttMessage,
   })
 
-  // ── Device update (Optimistic & No Pending/Waiting) ───────────────────────────
+  // ── Device update (No Pending/Waiting) ──────────────────────────────────────
   const updateDevice = useCallback((next, isFinal = true) => {
     setDevices(prev => prev.map(d => d.id === next.id ? next : d))
     if (isFinal && next.pubTopic) {
@@ -147,6 +145,16 @@ export default function App() {
         })
       })
     }
+
+    if (name === 'mqtt_read') {
+      const topic = typeof args === 'string' ? args.trim() : args?.topic
+      if (!topic) return { success: false, error: 'No topic specified' }
+      const base = (settings.mqtt.baseTopic || '').trim().replace(/^\/+|\/+$/g, '')
+      const fullTopic = base ? `${base}/${topic}`.replace(/\/\/+/g, '/') : topic
+      const val = sensorCache[fullTopic]
+      if (val !== undefined) return { success: true, topic: fullTopic, value: val }
+      return { success: false, error: 'No data' }
+    }
     return { success: false, error: `Unknown tool: ${name}` }
   }, [mqttClient, sensorCache, settings.mqtt.baseTopic])
 
@@ -154,7 +162,7 @@ export default function App() {
     settings, devicesRef, executeTool,
   })
 
-  // ── Theme & Offline detection ─────────────────────────────────────────────────
+  // ── Utils & Themes ─────────────────────────────────────────────────────────────
   useEffect(() => {
     const root = document.documentElement
     root.dataset.theme = tweaks.theme
@@ -164,47 +172,27 @@ export default function App() {
     root.style.setProperty('--accent-c', tweaks.accentChroma)
   }, [tweaks])
 
-  useEffect(() => {
-    const showToast = (type, text) => {
-      setToast({ type, text })
-      setTimeout(() => setToast(null), type === 'error' ? 5000 : 3000)
-    }
-    const onOffline = () => showToast('error', 'ออฟไลน์ — ไม่สามารถควบคุมอุปกรณ์ได้')
-    const onOnline = () => showToast('ok', 'เชื่อมต่ออินเตอร์เน็ตแล้ว')
-    window.addEventListener('offline', onOffline)
-    window.addEventListener('online', onOnline)
-    return () => {
-      window.removeEventListener('offline', onOffline)
-      window.removeEventListener('online', onOnline)
-    }
-  }, [])
-
   const openQR = useCallback(mode => { setQrMode(mode); setQrOpen(true) }, [])
-
   const handleScanned = useCallback(rawText => {
     const result = decodePayload(rawText)
-    if (!result.ok) {
-      setToast({ type: 'error', text: result.error })
-      setTimeout(() => setToast(null), 3500)
-      return
-    }
+    if (!result.ok) { setToast({ type: 'error', text: result.error }); return }
     const applied = applyPayload({ payload: result.payload, settings, devices: devicesRef.current, tweaks })
     setSettings(applied.settings); saveSettings(applied.settings)
-    setDevices(applied.devices)
-    setTweaks(applied.tweaks)
-    setToast({ type: 'ok', text: `Import สำเร็จ: ${applied.summary.join(' · ')}` })
-    setTimeout(() => setToast(null), 4000)
+    setDevices(applied.devices); setTweaks(applied.tweaks)
+    setToast({ type: 'ok', text: 'Import สำเร็จ' })
+    setTimeout(() => setToast(null), 3000)
   }, [settings, tweaks])
 
   const handleClearAll = useCallback(() => { clearAll(); window.location.reload() }, [])
 
-  // ── Stats & Filters ───────────────────────────────────────────────────────────
+  // ── Stats & Render ────────────────────────────────────────────────────────────
   const activeCount = devices.filter(d => d.type === 'digital' ? d.on : d.value > 0).length
+  const roomCount = new Set(devices.map(d => d.room)).size
   const analogDevices = devices.filter(d => d.type === 'analog')
   const analogAvg = analogDevices.length ? Math.round(analogDevices.reduce((a, d) => a + d.value, 0) / analogDevices.length) : 0
-  const roomCount = new Set(devices.map(d => d.room)).size
   const skillCount = (settings.skills || []).filter(s => s.enabled).length
   const modelShort = (settings.model || 'typhoon-v2').split('-instruct')[0]
+
   const visibleDevices = devices.filter(d => activeArea === 'All' || d.room === activeArea)
   const mqttUnhealthy = mqttStatus === 'reconnecting' || mqttStatus === 'error'
 
@@ -214,7 +202,7 @@ export default function App() {
       <div className="sh-app-body">
         <Nav page={page} setPage={setPage} activeCount={activeCount} deviceCount={devices.length} tweaks={tweaks} onToggleTheme={() => setTweaks(t => ({ ...t, theme: t.theme === 'dark' ? 'light' : 'dark' }))} onToggleTweaks={() => setTweaksOpen(v => !v)} tweaksOpen={tweaksOpen} profile={settings.profile} mqttStatus={mqttStatus} mobileOpen={mobileNavOpen} onCloseMobile={() => setMobileNav(false)} />
         <main className="sh-main">
-          {mqttUnhealthy && <div className={`sh-mqtt-banner ${mqttStatus === 'error' ? 'error' : ''}`}><span style={{ animation: 'pulse-dot 1s ease-in-out infinite', display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} />{mqttStatus === 'reconnecting' ? '↻ กำลังเชื่อมต่อ MQTT ใหม่...' : '⚠ MQTT เกิดข้อผิดพลาด — ตรวจสอบ Settings'}</div>}
+          {mqttUnhealthy && <div className="sh-mqtt-banner">⚠ MQTT Status: {mqttStatus}</div>}
           <AnimatePresence mode="wait">
             {page === 'devices' && (
               <motion.section key="devices" className="sh-board" {...pageVariants}>
@@ -227,7 +215,7 @@ export default function App() {
                         {editAreas && f !== 'All' && <button className="sh-filter-x" onClick={() => { setAreas(areas.filter(a => a !== f)); if (activeArea === f) setActiveArea('All') }}><Icon name="close" size={10} /></button>}
                       </span>
                     ))}
-                    {editAreas && <form className="sh-filter-add" onSubmit={e => { e.preventDefault(); const v = newArea.trim(); if (v && !areas.includes(v)) setAreas([...areas, v]); setNewArea('') }}><input value={newArea} onChange={e => setNewArea(e.target.value)} placeholder="New area…" /><button type="submit" disabled={!newArea.trim()}><Icon name="plus" size={11} /></button></form>}
+                    {editAreas && <form className="sh-filter-add" onSubmit={e => { e.preventDefault(); const v = newArea.trim(); if (v && !areas.includes(v)) setAreas([...areas, v]); setNewArea('') }}><input value={newArea} onChange={e => setNewArea(e.target.value)} placeholder="Add Area..." /><button type="submit" disabled={!newArea.trim()}><Icon name="plus" size={11} /></button></form>}
                     <button className={`sh-filter-edit ${editAreas ? 'on' : ''}`} onClick={() => setEditAreas(v => !v)}>{editAreas ? 'Done' : 'Edit'}</button>
                   </div>
                 </div>
@@ -237,7 +225,7 @@ export default function App() {
                   ))}
                   <AddDeviceTile onClick={() => { const id = 'dev-' + Date.now().toString(36); setDevices(prev => [...prev, { id, name: 'New Device', room: areas[0] || 'Living Room', type: 'digital', on: false, icon: 'bulb', pubTopic: `${id}/set`, subTopic: `${id}/state` }]) }} />
                 </motion.div></ErrorBoundary>
-                <footer className="sh-board-foot mono"><span>◀ · {devices.length} devices across {roomCount} rooms</span><span className="flex-1" /><span>MQTT: {settings.mqtt.broker}:{settings.mqtt.port}</span></footer>
+                <footer className="sh-board-foot mono"><span>◀ · {devices.length} devices</span><span className="flex-1" /><span>MQTT: {settings.mqtt.broker}:{settings.mqtt.port}</span></footer>
               </motion.section>
             )}
             {page === 'chat' && <motion.div key="chat" className="h-full" {...pageVariants}><ErrorBoundary><ChatPage messages={messages} onSend={sendMessage} thinking={thinking} executing={executing} onClear={clearChat} modelName={modelShort} skillCount={skillCount} msgCount={messages.filter(m => m.role === 'user').length} /></ErrorBoundary></motion.div>}
