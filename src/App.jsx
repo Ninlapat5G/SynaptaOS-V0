@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import mqtt from 'mqtt'
 
 import { initialDevices, DEFAULT_SETTINGS, INITIAL_AREAS, INITIAL_TWEAKS } from './data'
 import { saveSettings, loadSettings, saveDevices, loadDevices, saveAreas, loadAreas, clearAll } from './utils/storage'
-import { runAgent } from './utils/agent'
+import { decodePayload, applyPayload } from './utils/qrshare'
+import { useMQTT } from './hooks/useMQTT'
+import { useChat } from './hooks/useChat'
 
 import Nav, { MobileTopbar, MobileBottomNav } from './components/Nav'
 import DeviceCard, { AddDeviceTile } from './components/DeviceCard'
@@ -12,8 +13,8 @@ import ChatPage from './components/ChatPage'
 import SettingsPage from './components/SettingsPage'
 import TweaksPanel from './components/TweaksPanel'
 import QRShareModal from './components/QRShareModal'
+import ErrorBoundary from './components/ErrorBoundary'
 import Icon from './components/ui/Icon'
-import { decodePayload, applyPayload } from './utils/qrshare'
 
 const pageVariants = {
   initial: { opacity: 0, y: 10 },
@@ -30,10 +31,13 @@ export default function App() {
   const [tweaksOpen, setTweaksOpen]   = useState(false)
   const [page, setPage]               = useState(() => localStorage.getItem('sh-page') || 'devices')
   const [mobileNavOpen, setMobileNav] = useState(false)
+  const [toast, setToast]             = useState(null)
+  const [qrOpen, setQrOpen]           = useState(false)
+  const [qrMode, setQrMode]           = useState('share')
 
   useEffect(() => { localStorage.setItem('sh-page', page) }, [page])
 
-  // ── Settings ─────────────────────────────────────────────────────────────────
+  // ── Settings ──────────────────────────────────────────────────────────────────
   const [settings, setSettings] = useState(() => {
     const saved = loadSettings()
     if (!saved) return DEFAULT_SETTINGS
@@ -52,103 +56,69 @@ export default function App() {
   useEffect(() => { saveDevices(devices) }, [devices])
 
   // ── Areas ─────────────────────────────────────────────────────────────────────
-  const [areas, setAreas]         = useState(() => loadAreas() ?? INITIAL_AREAS)
+  const [areas, setAreas]           = useState(() => loadAreas() ?? INITIAL_AREAS)
   const [activeArea, setActiveArea] = useState('All')
-  const [editAreas, setEditAreas] = useState(false)
-  const [newArea, setNewArea]     = useState('')
+  const [editAreas, setEditAreas]   = useState(false)
+  const [newArea, setNewArea]       = useState('')
   useEffect(() => { saveAreas(areas) }, [areas])
 
-  // ── Chat ──────────────────────────────────────────────────────────────────────
-  const [messages, setMessages]   = useState([])
-  const [apiHistory, setApiHistory] = useState([])
-  const [thinking, setThinking]   = useState(false)
-  const [executing, setExecuting] = useState(null)
+  // ── Optimistic pending state ───────────────────────────────────────────────────
+  const [pendingIds, setPendingIds] = useState(new Set())
+  const pendingTimers               = useRef({})
+  useEffect(() => () => Object.values(pendingTimers.current).forEach(clearTimeout), [])
 
-  // ── MQTT ──────────────────────────────────────────────────────────────────────
-  const [mqttClient, setMqttClient]   = useState(null)
-  const [mqttStatus, setMqttStatus]   = useState('connecting')
-  const [sensorCache, setSensorCache] = useState({})
-
-  useEffect(() => {
-    if (!settings.mqtt.broker) { setMqttStatus('offline'); return }
-
-    setMqttStatus('connecting')
-    let client
-
-    try {
-      client = mqtt.connect(settings.mqtt.broker, {
-        clientId:      'synapta_web_' + Math.random().toString(16).substring(2, 10),
-        keepalive:     30,
-        clean:         true,
-        reconnectPeriod: 5000,
+  // ── MQTT message → device state sync ─────────────────────────────────────────
+  const handleMqttMessage = useCallback((topic, val) => {
+    const confirmedIds = []
+    setDevices(prev => prev.map(d => {
+      const base    = settings.mqtt.baseTopic || ''
+      const fullSub = d.subTopic?.startsWith(base) ? d.subTopic : `${base}/${d.subTopic}`.replace(/\/\/+/g, '/')
+      const fullPub = d.pubTopic?.startsWith(base) ? d.pubTopic : `${base}/${d.pubTopic}`.replace(/\/\/+/g, '/')
+      const matched = (topic === fullSub || topic === d.subTopic) ||
+                      (topic === fullPub || topic === d.pubTopic)
+      if (!matched) return d
+      confirmedIds.push(d.id)
+      if (d.type === 'digital') return { ...d, on: val === 'true' || val === '1' || val === 'on' || val === 'ON' }
+      if (d.type === 'analog')  return { ...d, value: Math.max(0, Math.min(d.max ?? 255, parseInt(val, 10) || 0)) }
+      return d
+    }))
+    if (confirmedIds.length > 0) {
+      confirmedIds.forEach(id => {
+        clearTimeout(pendingTimers.current[id])
+        delete pendingTimers.current[id]
       })
-
-      client.on('connect', () => {
-        setMqttStatus('connected')
-        setMqttClient(client)
-        // QoS 2 subscription — broker delivers retained messages immediately on subscribe,
-        // giving us the current device state without any additional request.
-        client.subscribe(`${settings.mqtt.baseTopic}/#`, { qos: 2 })
-      })
-
-      client.on('reconnect', () => setMqttStatus('reconnecting'))
-      client.on('error',     () => setMqttStatus('error'))
-      client.on('offline',   () => setMqttStatus('offline'))
-      client.on('close',     () => { setMqttStatus('offline'); setMqttClient(null) })
-
-      client.on('message', (topic, message) => {
-        const val = message.toString()
-        setSensorCache(prev => ({ ...prev, [topic]: val }))
-
-        setDevices(prev => prev.map(d => {
-          const base    = settings.mqtt.baseTopic || ''
-          const fullSub = d.subTopic?.startsWith(base) ? d.subTopic : `${base}/${d.subTopic}`.replace(/\/\/+/g, '/')
-          const fullPub = d.pubTopic?.startsWith(base) ? d.pubTopic : `${base}/${d.pubTopic}`.replace(/\/\/+/g, '/')
-          const matched = (topic === fullSub || topic === d.subTopic) ||
-                          (topic === fullPub || topic === d.pubTopic)
-          if (!matched) return d
-          if (d.type === 'digital') return { ...d, on: val === 'true' || val === '1' || val === 'on' || val === 'ON' }
-          if (d.type === 'analog')  return { ...d, value: Math.max(0, Math.min(d.max ?? 255, parseInt(val, 10) || 0)) }
-          return d
-        }))
-      })
-    } catch {
-      setMqttStatus('error')
+      setPendingIds(s => { const n = new Set(s); confirmedIds.forEach(id => n.delete(id)); return n })
     }
+  }, [settings.mqtt.baseTopic])
 
-    return () => {
-      if (client) { client.end(); setMqttClient(null); setMqttStatus('offline') }
-    }
-  }, [settings.mqtt.broker, settings.mqtt.baseTopic])
-
-  // ── Theme tokens ──────────────────────────────────────────────────────────────
-  useEffect(() => {
-    const root = document.documentElement
-    root.dataset.theme   = tweaks.theme
-    root.dataset.density = tweaks.density
-    root.dataset.grid    = tweaks.showGrid ? 'on' : 'off'
-    root.style.setProperty('--accent-h', tweaks.accentHue)
-    root.style.setProperty('--accent-c', tweaks.accentChroma)
-  }, [tweaks])
+  // ── MQTT hook ─────────────────────────────────────────────────────────────────
+  const { client: mqttClient, status: mqttStatus, sensorCache, publish: mqttPublish } = useMQTT({
+    broker:    settings.mqtt.broker,
+    baseTopic: settings.mqtt.baseTopic,
+    onMessage: handleMqttMessage,
+  })
 
   // ── Device update + MQTT publish ──────────────────────────────────────────────
-  const mqttPublish = useCallback((topic, payload, opts = {}) => {
-    if (!mqttClient) return
-    const base      = settings.mqtt.baseTopic || ''
-    const fullTopic = topic.startsWith(base) ? topic : `${base}/${topic}`.replace(/\/\/+/g, '/')
-    mqttClient.publish(fullTopic, String(payload), { qos: 2, ...opts })
-    return fullTopic
-  }, [mqttClient, settings.mqtt.baseTopic])
-
   const updateDevice = useCallback((next, isFinal = true) => {
     setDevices(prev => prev.map(d => d.id === next.id ? next : d))
     if (isFinal && next.pubTopic) {
       const payload = next.type === 'digital' ? (next.on ? 'true' : 'false') : String(next.value)
       mqttPublish(next.pubTopic, payload)
+
+      setPendingIds(s => new Set([...s, next.id]))
+      clearTimeout(pendingTimers.current[next.id])
+      pendingTimers.current[next.id] = setTimeout(() => {
+        setPendingIds(s => { const n = new Set(s); n.delete(next.id); return n })
+        delete pendingTimers.current[next.id]
+      }, 3000)
     }
   }, [mqttPublish])
 
-  // ── Tool executor (called by agent graph) ─────────────────────────────────────
+  const removeDevice = useCallback(id => {
+    setDevices(prev => prev.filter(x => x.id !== id))
+  }, [])
+
+  // ── Tool executor (called by agent) ───────────────────────────────────────────
   const executeTool = useCallback(async (name, args) => {
     if (name === 'mqtt_publish') {
       if (!mqttClient) return { success: false, error: 'MQTT not connected' }
@@ -189,93 +159,40 @@ export default function App() {
     return { success: false, error: `Unknown tool: ${name}` }
   }, [mqttClient, sensorCache, settings.mqtt.baseTopic])
 
-  // ── Send message (streaming agent graph) ──────────────────────────────────────
-  const sendMessage = useCallback(async text => {
-    if (!settings.apiKey) {
-      setMessages(prev => [
-        ...prev,
-        { role: 'user', text },
-        { role: 'ai', text: '⚠️ กรุณาตั้งค่า API Key ในหน้า Settings ก่อนใช้งาน' },
-      ])
-      return
+  // ── Chat hook ─────────────────────────────────────────────────────────────────
+  const { messages, thinking, executing, sendMessage, clearChat } = useChat({
+    settings,
+    devicesRef,
+    executeTool,
+  })
+
+  // ── Theme tokens ──────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const root = document.documentElement
+    root.dataset.theme   = tweaks.theme
+    root.dataset.density = tweaks.density
+    root.dataset.grid    = tweaks.showGrid ? 'on' : 'off'
+    root.style.setProperty('--accent-h', tweaks.accentHue)
+    root.style.setProperty('--accent-c', tweaks.accentChroma)
+  }, [tweaks])
+
+  // ── Offline detection ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    const showToast = (type, text) => {
+      setToast({ type, text })
+      setTimeout(() => setToast(null), type === 'error' ? 5000 : 3000)
     }
-
-    setMessages(prev => [...prev, { role: 'user', text }])
-    setThinking(true)
-    setExecuting(null)
-
-    try {
-      const { reply } = await runAgent({
-        text,
-        settings,
-        deviceList: devicesRef.current,
-        apiHistory,
-        executeTool,
-        onToolCall: (name, args) => {
-          setThinking(false)
-          setExecuting({ name, args })
-        },
-        onToolResult: (name, args, result) => {
-          setExecuting(null)
-          setThinking(true)
-          setMessages(prev => [...prev, { role: 'tool', name, args, result }])
-        },
-        onStream: chunk => {
-          setThinking(false)
-          setMessages(prev => {
-            const last = prev[prev.length - 1]
-            if (last?.role === 'ai' && last?.streaming) {
-              return [...prev.slice(0, -1), { ...last, text: last.text + chunk }]
-            }
-            return [...prev, { role: 'ai', text: chunk, streaming: true }]
-          })
-        },
-      })
-
-      // Finalise streaming message
-      setMessages(prev => {
-        const last = prev[prev.length - 1]
-        if (last?.role === 'ai' && last?.streaming) {
-          return [...prev.slice(0, -1), { role: 'ai', text: last.text }]
-        }
-        if (reply && last?.role !== 'ai') {
-          return [...prev, { role: 'ai', text: reply }]
-        }
-        return prev
-      })
-
-      setApiHistory(prev => [
-        ...prev,
-        { role: 'user', content: text },
-        { role: 'assistant', content: reply },
-      ])
-    } catch (err) {
-      setMessages(prev => {
-        const last = prev[prev.length - 1]
-        const base = last?.streaming ? prev.slice(0, -1) : prev
-        return [...base, { role: 'ai', text: `⚠️ ${err.message}` }]
-      })
-    } finally {
-      setThinking(false)
-      setExecuting(null)
+    const onOffline = () => showToast('error', 'ออฟไลน์ — ไม่สามารถควบคุมอุปกรณ์ได้')
+    const onOnline  = () => showToast('ok',    'เชื่อมต่ออินเตอร์เน็ตแล้ว')
+    window.addEventListener('offline', onOffline)
+    window.addEventListener('online',  onOnline)
+    return () => {
+      window.removeEventListener('offline', onOffline)
+      window.removeEventListener('online',  onOnline)
     }
-  }, [apiHistory, settings, executeTool])
-
-  const clearChat = useCallback(() => {
-    setMessages([]); setApiHistory([]); setThinking(false); setExecuting(null)
-  }, [])
-
-  // ── Clear all local data ───────────────────────────────────────────────────────
-  const handleClearAll = useCallback(() => {
-    clearAll()
-    window.location.reload()
   }, [])
 
   // ── QR Share / Import ─────────────────────────────────────────────────────────
-  const [qrOpen, setQrOpen]   = useState(false)
-  const [qrMode, setQrMode]   = useState('share')
-  const [toast, setToast]     = useState(null)
-
   const openQR = useCallback(mode => { setQrMode(mode); setQrOpen(true) }, [])
 
   const handleScanned = useCallback(rawText => {
@@ -299,6 +216,12 @@ export default function App() {
     setTimeout(() => setToast(null), 4000)
   }, [settings, tweaks])
 
+  // ── Clear all local data ───────────────────────────────────────────────────────
+  const handleClearAll = useCallback(() => {
+    clearAll()
+    window.location.reload()
+  }, [])
+
   // ── Stats ─────────────────────────────────────────────────────────────────────
   const activeCount   = devices.filter(d => d.type === 'digital' ? d.on : d.value > 0).length
   const analogDevices = devices.filter(d => d.type === 'analog')
@@ -310,6 +233,8 @@ export default function App() {
   const modelShort    = (settings.model || 'typhoon-v2').split('-instruct')[0]
 
   const visibleDevices = devices.filter(d => activeArea === 'All' || d.room === activeArea)
+
+  const mqttUnhealthy = mqttStatus === 'reconnecting' || mqttStatus === 'error'
 
   return (
     <div className="sh-app">
@@ -335,6 +260,13 @@ export default function App() {
         />
 
         <main className="sh-main">
+          {mqttUnhealthy && (
+            <div className={`sh-mqtt-banner ${mqttStatus === 'error' ? 'error' : ''}`}>
+              <span style={{ animation: 'pulse-dot 1s ease-in-out infinite', display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} />
+              {mqttStatus === 'reconnecting' ? '↻ กำลังเชื่อมต่อ MQTT ใหม่...' : '⚠ MQTT เกิดข้อผิดพลาด — ตรวจสอบ Settings'}
+            </div>
+          )}
+
           <AnimatePresence mode="wait">
             {page === 'devices' && (
               <motion.section key="devices" className="sh-board" {...pageVariants}>
@@ -392,27 +324,31 @@ export default function App() {
                   </div>
                 </div>
 
-                <motion.div className="sh-grid" variants={gridVariants} initial="hidden" animate="visible">
-                  {visibleDevices.map(d => (
-                    <DeviceCard
-                      key={d.id} device={d}
-                      onUpdate={updateDevice}
-                      onRemove={id => setDevices(prev => prev.filter(x => x.id !== id))}
-                      areas={areas}
+                <ErrorBoundary>
+                  <motion.div className="sh-grid" variants={gridVariants} initial="hidden" animate="visible">
+                    {visibleDevices.map(d => (
+                      <DeviceCard
+                        key={d.id}
+                        device={d}
+                        onUpdate={updateDevice}
+                        onRemove={removeDevice}
+                        areas={areas}
+                        isPending={pendingIds.has(d.id)}
+                      />
+                    ))}
+                    <AddDeviceTile
+                      onClick={() => {
+                        const id = 'dev-' + Date.now().toString(36)
+                        setDevices(prev => [...prev, {
+                          id, name: 'New Device', room: areas[0] || 'Living Room',
+                          type: 'digital', on: false, icon: 'bulb',
+                          pubTopic: `${id}/set`,
+                          subTopic: `${id}/state`,
+                        }])
+                      }}
                     />
-                  ))}
-                  <AddDeviceTile
-                    onClick={() => {
-                      const id = 'dev-' + Date.now().toString(36)
-                      setDevices(prev => [...prev, {
-                        id, name: 'New Device', room: areas[0] || 'Living Room',
-                        type: 'digital', on: false, icon: 'bulb',
-                        pubTopic: `${settings.mqtt.baseTopic}/${id}/set`,
-                        subTopic: `${settings.mqtt.baseTopic}/${id}/state`,
-                      }])
-                    }}
-                  />
-                </motion.div>
+                  </motion.div>
+                </ErrorBoundary>
 
                 <footer className="sh-board-foot mono">
                   <span>◀ · {devices.length} devices across {roomCount} rooms</span>
@@ -424,28 +360,32 @@ export default function App() {
 
             {page === 'chat' && (
               <motion.div key="chat" className="h-full" {...pageVariants}>
-                <ChatPage
-                  messages={messages}
-                  onSend={sendMessage}
-                  thinking={thinking}
-                  executing={executing}
-                  onClear={clearChat}
-                  modelName={modelShort}
-                  skillCount={skillCount}
-                  msgCount={apiHistory.length}
-                />
+                <ErrorBoundary>
+                  <ChatPage
+                    messages={messages}
+                    onSend={sendMessage}
+                    thinking={thinking}
+                    executing={executing}
+                    onClear={clearChat}
+                    modelName={modelShort}
+                    skillCount={skillCount}
+                    msgCount={messages.filter(m => m.role === 'user').length}
+                  />
+                </ErrorBoundary>
               </motion.div>
             )}
 
             {page === 'settings' && (
               <motion.div key="settings" {...pageVariants}>
-                <SettingsPage
-                  settings={settings}
-                  onSave={handleSaveSettings}
-                  mqttStatus={mqttStatus}
-                  onClearAll={handleClearAll}
-                  onOpenQR={openQR}
-                />
+                <ErrorBoundary>
+                  <SettingsPage
+                    settings={settings}
+                    onSave={handleSaveSettings}
+                    mqttStatus={mqttStatus}
+                    onClearAll={handleClearAll}
+                    onOpenQR={openQR}
+                  />
+                </ErrorBoundary>
               </motion.div>
             )}
           </AnimatePresence>
