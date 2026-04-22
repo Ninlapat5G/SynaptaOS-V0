@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 
 import { initialDevices, DEFAULT_SETTINGS, INITIAL_AREAS, INITIAL_TWEAKS } from './data'
@@ -62,66 +62,61 @@ export default function App() {
   const [newArea, setNewArea] = useState('')
   useEffect(() => { saveAreas(areas) }, [areas])
 
-  // ── Optimistic pending state ───────────────────────────────────────────────────
-  const [pendingIds, setPendingIds] = useState(new Set())
-  const pendingTimers = useRef({})
-  useEffect(() => () => Object.values(pendingTimers.current).forEach(clearTimeout), [])
-
   // ── MQTT message → device state sync ─────────────────────────────────────────
   const handleMqttMessage = useCallback((topic, val) => {
-    const base = settings.mqtt.baseTopic || ''
+    const base = (settings.mqtt.baseTopic || '').trim().replace(/^\/+|\/+$/g, '')
+    const cleanIncomingTopic = topic.trim().replace(/^\/+|\/+$/g, '')
 
-    // 1. หาอุปกรณ์ที่ตรงกับ Topic แบบ Synchronous จาก devicesRef
-    const matchedDevices = devicesRef.current.filter(d => {
-      const fullSub = d.subTopic?.startsWith(base) ? d.subTopic : `${base}/${d.subTopic}`.replace(/\/\/+/g, '/')
-      const fullPub = d.pubTopic?.startsWith(base) ? d.pubTopic : `${base}/${d.pubTopic}`.replace(/\/\/+/g, '/')
-      return (topic === fullSub || topic === d.subTopic) || (topic === fullPub || topic === d.pubTopic)
-    })
-
-    if (matchedDevices.length === 0) return
-
-    // 2. เคลียร์ Pending ทันทีเมื่อเจออุปกรณ์ที่ส่งค่าตรงกันมา
-    matchedDevices.forEach(d => {
-      clearTimeout(pendingTimers.current[d.id])
-      delete pendingTimers.current[d.id]
-    })
-
-    setPendingIds(s => {
-      const n = new Set(s)
-      matchedDevices.forEach(d => n.delete(d.id))
-      return n
-    })
-
-    // 3. สั่งอัปเดต UI ของ Device
     setDevices(prev => prev.map(d => {
-      const isMatch = matchedDevices.some(m => m.id === d.id)
-      if (!isMatch) return d
+      const sub = (d.subTopic || '').trim().replace(/^\/+|\/+$/g, '')
+      const pub = (d.pubTopic || '').trim().replace(/^\/+|\/+$/g, '')
+
+      const fullSub = sub.startsWith(base) ? sub : `${base}/${sub}`.replace(/\/\/+/g, '/').replace(/^\/+|\/+$/g, '')
+      const fullPub = pub.startsWith(base) ? pub : `${base}/${pub}`.replace(/\/\/+/g, '/').replace(/^\/+|\/+$/g, '')
+
+      const matched = (cleanIncomingTopic === fullSub || cleanIncomingTopic === sub) ||
+        (cleanIncomingTopic === fullPub || cleanIncomingTopic === pub)
+
+      if (!matched) return d
+
       if (d.type === 'digital') return { ...d, on: val === 'true' || val === '1' || val === 'on' || val === 'ON' }
       if (d.type === 'analog') return { ...d, value: Math.max(0, Math.min(d.max ?? 255, parseInt(val, 10) || 0)) }
       return d
     }))
   }, [settings.mqtt.baseTopic])
 
+  // ── Subscribe Topics ─────────────────────────────────────────────────────────
+  const subscribeTopics = useMemo(() => {
+    const list = new Set()
+    const base = (settings.mqtt.baseTopic || '').trim().replace(/^\/+|\/+$/g, '')
+    if (base) {
+      list.add(`${base}/#`)
+    } else {
+      devices.forEach(d => {
+        if (d.pubTopic) list.add(d.pubTopic.trim().replace(/^\/+|\/+$/g, ''))
+        if (d.subTopic) list.add(d.subTopic.trim().replace(/^\/+|\/+$/g, ''))
+      })
+    }
+    return Array.from(list).filter(Boolean)
+  }, [devices, settings.mqtt.baseTopic])
+
   // ── MQTT hook ─────────────────────────────────────────────────────────────────
   const { client: mqttClient, status: mqttStatus, sensorCache, publish: mqttPublish } = useMQTT({
     broker: settings.mqtt.broker,
     baseTopic: settings.mqtt.baseTopic,
+    subscribeTopics,
     onMessage: handleMqttMessage,
   })
 
-  // ── Device update + MQTT publish ──────────────────────────────────────────────
+  // ── Device update + MQTT publish (Lean Version) ──────────────────────────────
   const updateDevice = useCallback((next, isFinal = true) => {
+    // อัปเดต UI ทันทีแบบไม่ต้องรอ (Optimistic)
     setDevices(prev => prev.map(d => d.id === next.id ? next : d))
+
+    // ส่งคำสั่งออกไปเลยด้วย QoS 2 ที่ฝังอยู่ใน mqttPublish แล้ว
     if (isFinal && next.pubTopic) {
       const payload = next.type === 'digital' ? (next.on ? 'true' : 'false') : String(next.value)
       mqttPublish(next.pubTopic, payload)
-
-      setPendingIds(s => new Set([...s, next.id]))
-      clearTimeout(pendingTimers.current[next.id])
-      pendingTimers.current[next.id] = setTimeout(() => {
-        setPendingIds(s => { const n = new Set(s); n.delete(next.id); return n })
-        delete pendingTimers.current[next.id]
-      }, 3000)
     }
   }, [mqttPublish])
 
@@ -129,19 +124,23 @@ export default function App() {
     setDevices(prev => prev.filter(x => x.id !== id))
   }, [])
 
-  // ── Tool executor (called by agent) ───────────────────────────────────────────
+  // ── Tool executor ───────────────────────────────────────────────────────────
   const executeTool = useCallback(async (name, args) => {
     if (name === 'mqtt_publish') {
       if (!mqttClient) return { success: false, error: 'MQTT not connected' }
-
       const topic = args?.topic
       const payload = args?.payload
       const device = devicesRef.current.find(d => d.pubTopic === topic || d.pubTopic?.endsWith('/' + topic))
       const rawTopic = device ? device.pubTopic : topic
 
       return new Promise(resolve => {
-        const base = settings.mqtt.baseTopic || ''
-        const fullTopic = rawTopic.startsWith(base) ? rawTopic : `${base}/${rawTopic}`.replace(/\/\/+/g, '/')
+        const base = (settings.mqtt.baseTopic || '').trim().replace(/^\/+|\/+$/g, '')
+        const cleanTopic = rawTopic.trim().replace(/^\/+|\/+$/g, '')
+        let fullTopic = cleanTopic
+        if (base && !cleanTopic.startsWith(base)) {
+          fullTopic = `${base}/${cleanTopic}`.replace(/\/\/+/g, '/')
+        }
+
         mqttClient.publish(fullTopic, String(payload), { qos: 2 }, err => {
           if (err) { resolve({ success: false, error: err.message }); return }
           if (device) {
@@ -160,8 +159,12 @@ export default function App() {
     if (name === 'mqtt_read') {
       const topic = typeof args === 'string' ? args.trim() : args?.topic
       if (!topic) return { success: false, error: 'No topic specified' }
-      const base = settings.mqtt.baseTopic || ''
-      const fullTopic = topic.startsWith(base) ? topic : `${base}/${topic}`.replace(/\/\/+/g, '/')
+      const base = (settings.mqtt.baseTopic || '').trim().replace(/^\/+|\/+$/g, '')
+      const cleanTopic = topic.trim().replace(/^\/+|\/+$/g, '')
+      let fullTopic = cleanTopic
+      if (base && !cleanTopic.startsWith(base)) {
+        fullTopic = `${base}/${cleanTopic}`.replace(/\/\/+/g, '/')
+      }
       const val = sensorCache[fullTopic]
       if (val !== undefined) return { success: true, topic: fullTopic, value: val }
       return { success: false, note: `No data cached for topic: ${fullTopic}` }
@@ -344,7 +347,7 @@ export default function App() {
                         onUpdate={updateDevice}
                         onRemove={removeDevice}
                         areas={areas}
-                        isPending={pendingIds.has(d.id)}
+                        isPending={false} // ปิดสถานะ Pending ถาวร
                       />
                     ))}
                     <AddDeviceTile
