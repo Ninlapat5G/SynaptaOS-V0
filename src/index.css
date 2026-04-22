@@ -955,6 +955,71 @@
     50%       { opacity: 0.55; }
   }
 
+  /* ── Scan result overlay ── */
+  .sh-scan-overlay {
+    @apply absolute inset-0 flex items-center justify-center p-4 z-10;
+    background: oklch(0 0 0 / 0.72);
+    backdrop-filter: blur(10px);
+    border-radius: inherit;
+  }
+  .sh-scan-result {
+    @apply flex flex-col items-center gap-4 p-6 rounded-2xl w-full text-center;
+    max-width: 280px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    box-shadow: 0 24px 48px oklch(0 0 0 / 0.5);
+  }
+  .sh-scan-result.success { border-color: oklch(var(--accent-l) var(--accent-c) var(--accent-h) / 0.5); }
+  .sh-scan-result.error   { border-color: oklch(0.65 0.22 25 / 0.4); }
+
+  .sh-scan-result-icon {
+    @apply w-14 h-14 rounded-full flex items-center justify-center;
+  }
+  .sh-scan-result-icon.success { background: oklch(var(--accent-l) var(--accent-c) var(--accent-h) / 0.15); color: var(--accent); }
+  .sh-scan-result-icon.error   { background: oklch(0.65 0.22 25 / 0.12); color: oklch(0.72 0.22 25); }
+
+  .sh-scan-result-title {
+    @apply text-base font-semibold;
+    color: var(--ink);
+  }
+  .sh-scan-result-scopes {
+    @apply flex flex-wrap gap-1.5 justify-center;
+  }
+  .sh-scan-result-chip {
+    @apply text-[10px] tracking-wider px-2.5 py-1 rounded-full;
+    background: oklch(var(--accent-l) var(--accent-c) var(--accent-h) / 0.12);
+    border: 1px solid oklch(var(--accent-l) var(--accent-c) var(--accent-h) / 0.3);
+    color: var(--accent);
+  }
+  .sh-scan-result-msg {
+    @apply text-[11px] leading-relaxed;
+    color: var(--ink-dim);
+  }
+  .sh-scan-result-actions { @apply flex gap-2 w-full; }
+  .sh-scan-result-actions button { @apply flex-1; }
+
+  /* ── QR file upload ── */
+  .sh-qr-upload-row {
+    @apply flex flex-col items-center gap-2;
+  }
+  .sh-qr-upload-divider {
+    @apply text-[10px] tracking-widest;
+    color: var(--ink-xdim);
+  }
+  .sh-qr-upload-btn {
+    @apply flex items-center justify-center gap-2 w-full py-2.5 rounded-xl text-sm
+           cursor-pointer transition-all duration-150;
+    background: var(--bg-1);
+    border: 1px solid var(--line);
+    color: var(--ink-dim);
+  }
+  .sh-qr-upload-btn:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--card);
+  }
+  .sh-qr-upload-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
   /* ── Toast ── */
   .sh-toast {
     @apply fixed bottom-6 left-1/2 -translate-x-1/2 z-[60]
