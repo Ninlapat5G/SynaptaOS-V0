@@ -1,9 +1,24 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { motion } from 'framer-motion'
+import { motion, useMotionValue, useTransform, animate } from 'framer-motion'
 
 export default function Slider({ value, onChange, max = 255 }) {
-  const trackRef  = useRef(null)
+  const trackRef = useRef(null)
   const [dragging, setDragging] = useState(false)
+  const pctMV = useMotionValue((value / max) * 100)
+  const widthStyle = useTransform(pctMV, p => `${p}%`)
+
+  useEffect(() => {
+    const target = (value / max) * 100
+    if (dragging) {
+      pctMV.set(target)
+      return
+    }
+    const ctrl = animate(pctMV, target, {
+      duration: 0.45,
+      ease: [0.16, 1, 0.3, 1],
+    })
+    return () => ctrl.stop()
+  }, [value, max, dragging, pctMV])
 
   const valueAt = useCallback(e => {
     const el = trackRef.current
@@ -44,10 +59,10 @@ export default function Slider({ value, onChange, max = 255 }) {
             <span key={i} style={{ opacity: (i / 32) * 100 < pct ? 1 : 0.18 }} />
           ))}
         </div>
-        <div className="sh-slider-fill" style={{ width: `${pct}%` }} />
+        <motion.div className="sh-slider-fill" style={{ width: widthStyle }} />
         <motion.div
           className="sh-slider-thumb"
-          style={{ left: `${pct}%` }}
+          style={{ left: widthStyle }}
           animate={{ scale: dragging ? 1.25 : 1 }}
           transition={{ type: 'spring', stiffness: 600, damping: 30 }}
         />

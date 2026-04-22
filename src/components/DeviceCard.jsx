@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, memo } from 'react'
 import { motion, useMotionValue, animate } from 'framer-motion'
 import Icon from './ui/Icon'
 import Toggle from './ui/Toggle'
 import Slider from './ui/Slider'
 
 function AnimatedReadout({ value, max = 255 }) {
-  const mv          = useMotionValue(value)
+  const mv            = useMotionValue(value)
   const [num, setNum] = useState(value)
 
   useEffect(() => {
@@ -34,9 +34,20 @@ export const cardVariants = {
 
 const MAX_OPTIONS = [255, 1023]
 
-function EditCard({ device, onUpdate, onRemove, areas, onCancel }) {
+const TOPIC_RE = /[#+]/
+
+function topicError(t) {
+  if (!t) return null
+  if (TOPIC_RE.test(t)) return 'ห้ามใช้ # หรือ + ใน publish topic'
+  return null
+}
+
+const EditCard = memo(function EditCard({ device, onUpdate, onRemove, areas, onCancel }) {
   const [draft, setDraft] = useState(device)
   const set = patch => setDraft(d => ({ ...d, ...patch }))
+
+  const pubErr = topicError(draft.pubTopic)
+  const hasErr = !!pubErr
 
   return (
     <motion.div
@@ -110,8 +121,14 @@ function EditCard({ device, onUpdate, onRemove, areas, onCancel }) {
                 value={draft.pubTopic || ''}
                 onChange={e => set({ pubTopic: e.target.value })}
                 placeholder={`${draft.room.toLowerCase().replace(/\s+/g, '-')}/${draft.id}/set`}
+                style={pubErr ? { borderColor: 'oklch(0.65 0.22 25)' } : {}}
               />
             </div>
+            {pubErr && (
+              <span className="mono" style={{ fontSize: 10, color: 'oklch(0.72 0.22 25)', paddingLeft: 40 }}>
+                ⚠ {pubErr}
+              </span>
+            )}
             <div className="flex items-center gap-2">
               <span className="sh-topic-tag sub mono">SUB</span>
               <input
@@ -127,15 +144,19 @@ function EditCard({ device, onUpdate, onRemove, areas, onCancel }) {
         <button className="sh-card-remove" onClick={() => onRemove(device.id)}>Remove</button>
         <div className="flex-1" />
         <button className="sh-btn-ghost" onClick={onCancel}>Cancel</button>
-        <button className="sh-btn-primary" onClick={() => { onUpdate(draft); onCancel() }}>
+        <button
+          className="sh-btn-primary"
+          disabled={hasErr}
+          onClick={() => { if (!hasErr) { onUpdate(draft); onCancel() } }}
+        >
           Save
         </button>
       </div>
     </motion.div>
   )
-}
+})
 
-export default function DeviceCard({ device, onUpdate, onRemove, areas }) {
+const DeviceCard = memo(function DeviceCard({ device, onUpdate, onRemove, areas, isPending }) {
   const [editing, setEditing] = useState(false)
   const max  = device.max ?? 255
   const isOn = device.type === 'digital' ? device.on : device.value > 0
@@ -156,13 +177,14 @@ export default function DeviceCard({ device, onUpdate, onRemove, areas }) {
     <motion.div
       className={`sh-card ${isOn ? 'is-on' : ''}`}
       variants={cardVariants}
+      animate={{ opacity: isPending ? 0.7 : 1 }}
       whileHover={{ y: -2, boxShadow: '0 8px 32px oklch(0 0 0 / 0.18)' }}
       transition={{ type: 'spring', stiffness: 400, damping: 30 }}
     >
       <div className="sh-card-top">
         <div className="sh-card-icon">
           <Icon name={device.icon} size={20} />
-          <span className="sh-card-status-dot" />
+          <span className={`sh-card-status-dot ${isPending ? 'is-pending' : ''}`} />
         </div>
         <div className="sh-card-meta">
           <div className="sh-card-room mono">{device.room.toUpperCase()}</div>
@@ -215,7 +237,9 @@ export default function DeviceCard({ device, onUpdate, onRemove, areas }) {
       )}
     </motion.div>
   )
-}
+})
+
+export default DeviceCard
 
 export function AddDeviceTile({ onClick }) {
   return (

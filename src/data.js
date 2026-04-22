@@ -6,8 +6,8 @@ export const initialDevices = [
     type: 'digital',
     on: true,
     icon: 'lamp',
-    pubTopic: 'Mylab/smarthome/living-room/liv-lamp/set',
-    subTopic: 'Mylab/smarthome/living-room/liv-lamp/state',
+    pubTopic: 'living-room/liv-lamp/set',
+    subTopic: 'living-room/liv-lamp/state',
   },
   {
     id: 'liv-dim',
@@ -17,8 +17,8 @@ export const initialDevices = [
     value: 128,
     max: 255,
     icon: 'bulb',
-    pubTopic: 'Mylab/smarthome/living-room/liv-dim/set',
-    subTopic: 'Mylab/smarthome/living-room/liv-dim/state',
+    pubTopic: 'living-room/liv-dim/set',
+    subTopic: 'living-room/liv-dim/state',
   },
 ]
 
