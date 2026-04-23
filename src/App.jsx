@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 
 import { initialDevices, DEFAULT_SETTINGS, INITIAL_AREAS, INITIAL_TWEAKS } from './data'
 import { saveSettings, loadSettings, saveDevices, loadDevices, saveAreas, loadAreas, clearAll } from './utils/storage'
-import { decodePayload, applyPayload } from './utils/qrshare'
+// 🗑️ มักเอา import QRShare ออกไปแล้วน้า
 import { normalizeBase, buildFullTopic } from './utils/mqttTopic'
 import { useMQTT } from './hooks/useMQTT'
 import { useChat } from './hooks/useChat'
@@ -13,7 +13,6 @@ import DeviceCard, { AddDeviceTile } from './components/DeviceCard'
 import ChatPage from './components/ChatPage'
 import SettingsPage from './components/SettingsPage'
 import TweaksPanel from './components/TweaksPanel'
-import QRShareModal from './components/QRShareModal'
 import ErrorBoundary from './components/ErrorBoundary'
 import Icon from './components/ui/Icon'
 
@@ -33,8 +32,8 @@ export default function App() {
   const [page, setPage] = useState(() => localStorage.getItem('sh-page') || 'devices')
   const [mobileNavOpen, setMobileNav] = useState(false)
   const [toast, setToast] = useState(null)
-  const [qrOpen, setQrOpen] = useState(false)
-  const [qrMode, setQrMode] = useState('share')
+
+  // 🗑️ โละ State ของ QR ออกไปแล้วฮะ
 
   useEffect(() => { localStorage.setItem('sh-page', page) }, [page])
 
@@ -76,7 +75,7 @@ export default function App() {
       let matched = false
       const next = prev.map(d => {
         if (incoming !== buildFullTopic(d.subTopic, base) &&
-            incoming !== buildFullTopic(d.pubTopic, base)) return d
+          incoming !== buildFullTopic(d.pubTopic, base)) return d
         matched = true
         if (d.type === 'digital') return { ...d, on: val === 'true' || val === '1' || val === 'on' || val === 'ON' }
         if (d.type === 'analog') return { ...d, value: Math.max(0, Math.min(d.max ?? 255, parseInt(val, 10) || 0)) }
@@ -84,12 +83,13 @@ export default function App() {
       })
       return matched ? next : prev
     })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // ── MQTT hook ─────────────────────────────────────────────────────────────────
   const { client: mqttClient, status: mqttStatus, sensorCache, publish: mqttPublish } = useMQTT({
     broker: settings.mqtt.broker,
+    port: settings.mqtt.port, // ✨ ส่ง port เข้าไปด้วยเผื่อลืม
     baseTopic: settings.mqtt.baseTopic,
     onMessage: handleMqttMessage,
   })
@@ -150,7 +150,8 @@ export default function App() {
   }, [mqttClient, sensorCache])
 
   // ── Chat hook ─────────────────────────────────────────────────────────────────
-  const { messages, thinking, executing, sendMessage, clearChat } = useChat({
+  // ✨ มักดึง stopChat ออกมาแล้วนะฮะ!
+  const { messages, thinking, executing, sendMessage, clearChat, stopChat } = useChat({
     settings,
     devicesRef,
     executeTool,
@@ -181,30 +182,6 @@ export default function App() {
       window.removeEventListener('online', onOnline)
     }
   }, [])
-
-  // ── QR Share / Import ─────────────────────────────────────────────────────────
-  const openQR = useCallback(mode => { setQrMode(mode); setQrOpen(true) }, [])
-
-  const handleScanned = useCallback(rawText => {
-    const result = decodePayload(rawText)
-    if (!result.ok) {
-      setToast({ type: 'error', text: result.error })
-      setTimeout(() => setToast(null), 3500)
-      return
-    }
-    const applied = applyPayload({
-      payload: result.payload,
-      settings,
-      devices: devicesRef.current,
-      tweaks,
-    })
-    setSettings(applied.settings)
-    saveSettings(applied.settings)
-    setDevices(applied.devices)
-    setTweaks(applied.tweaks)
-    setToast({ type: 'ok', text: `Import สำเร็จ: ${applied.summary.join(' · ')}` })
-    setTimeout(() => setToast(null), 4000)
-  }, [settings, tweaks])
 
   const handleClearAll = useCallback(() => {
     clearAll()
@@ -352,6 +329,7 @@ export default function App() {
                   <ChatPage
                     messages={messages}
                     onSend={sendMessage}
+                    onStop={stopChat} // ✨ ใส่ onStop เข้าไปให้ ChatPage แล้วฮะ ปุ่มใช้งานได้แน่นอน!
                     thinking={thinking}
                     executing={executing}
                     onClear={clearChat}
@@ -366,12 +344,12 @@ export default function App() {
             {page === 'settings' && (
               <motion.div key="settings" {...pageVariants}>
                 <ErrorBoundary>
+                  {/* 🗑️ ถอด onOpenQR ออก เพราะหน้า Setting เราเป็น JSON หมดแล้ว */}
                   <SettingsPage
                     settings={settings}
                     onSave={handleSaveSettings}
                     mqttStatus={mqttStatus}
                     onClearAll={handleClearAll}
-                    onOpenQR={openQR}
                   />
                 </ErrorBoundary>
               </motion.div>
@@ -386,15 +364,7 @@ export default function App() {
       />
       <TweaksPanel open={tweaksOpen} tweaks={tweaks} onChange={patch => setTweaks(t => ({ ...t, ...patch }))} />
 
-      <QRShareModal
-        open={qrOpen}
-        mode={qrMode}
-        onClose={() => setQrOpen(false)}
-        settings={settings}
-        devices={devices}
-        tweaks={tweaks}
-        onScanned={handleScanned}
-      />
+      {/* 🗑️ ลบ Component QRShareModal ทิ้งไปเลย สะอาดตา! */}
 
       <AnimatePresence>
         {toast && (
