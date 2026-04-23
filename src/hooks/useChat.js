@@ -14,8 +14,6 @@ export function useChat({ settings, devicesRef, executeTool }) {
       abortControllerRef.current.abort()
       abortControllerRef.current = null
     }
-    setThinking(false)
-    setExecuting(null)
   }, [])
 
   const sendMessage = useCallback(async text => {
@@ -81,11 +79,14 @@ export function useChat({ settings, devicesRef, executeTool }) {
       ])
     } catch (err) {
       if (err.name === 'AbortError') {
-        // กรณีโดนยกเลิกด้วยการกดหยุด
+        // ✨ มักเพิ่มข้อความหยุดการทำงานให้ตรงนี้เลยฮะ
         setMessages(prev => {
           const last = prev[prev.length - 1]
           if (last?.role === 'ai' && last?.streaming) {
-            return [...prev.slice(0, -1), { role: 'ai', text: last.text }]
+            return [...prev.slice(0, -1), { role: 'ai', text: last.text + '\n\n*— 🛑 หยุดการสร้างข้อความ —*' }]
+          } else if (last?.role === 'user' || executing) {
+            // กรณีหยุดตอนที่มันยังคิดอยู่ หรือกำลังรัน Tool
+            return [...prev, { role: 'ai', text: '*— 🛑 ยกเลิกการประมวลผล —*' }]
           }
           return prev
         })

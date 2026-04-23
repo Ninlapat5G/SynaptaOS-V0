@@ -130,7 +130,6 @@ async function toolExecutorNode(state) {
 
     let result
     try {
-      // 🐛 มักแก้ตรงนี้: ครอบ try catch ให้ ตอนรัน tool ถ้าเกิดปัญหาจะได้ไม่พาบอทแครชไปเลย
       result = await executeTool(name, args)
     } catch (err) {
       console.error(`[Agent] Tool execution failed for ${name}:`, err)
@@ -170,16 +169,14 @@ ${stateSummary}` : ''}
 ${toolContext}`
 
   let reply = ''
-  try {
-    await llm.stream(
-      [{ role: 'system', content: systemPrompt }, ...apiHistory, { role: 'user', content: text }],
-      { temperature: 0.7, max_tokens: 4096 },
-      chunk => { reply += chunk; onStream?.(chunk) },
-      signal
-    )
-  } catch (err) {
-    if (err.name !== 'AbortError') throw err
-  }
+
+  // 🐛 มักแก้ตรงนี้: ให้โยน Error ทุกอย่างรวมถึง AbortError ออกไปเลย ไม่ต้องอมไว้!
+  await llm.stream(
+    [{ role: 'system', content: systemPrompt }, ...apiHistory, { role: 'user', content: text }],
+    { temperature: 0.7, max_tokens: 4096 },
+    chunk => { reply += chunk; onStream?.(chunk) },
+    signal
+  )
 
   return { ...state, reply }
 }
