@@ -142,9 +142,10 @@ npm run build    # production build
 | 01 Profile | ชื่อที่ AI ใช้เรียกในบทสนทนา |
 | 02 Language Model | Endpoint · API Key · Model · System Prompt |
 | 03 Skills | เปิด/ปิด tool หรือเพิ่ม custom tool พร้อม JSON Schema |
-| 04 MQTT Broker | URL · Port · Base Topic · สถานะการเชื่อมต่อ |
-| 05 Share Configuration | Copy/Paste JSON เพื่อย้าย config ข้ามเครื่อง |
-| 06 Data | ปุ่ม Clear all local data |
+| 04 Integrations | Serper API Key สำหรับ web_search skill |
+| 05 MQTT Broker | URL · Port · Base Topic · สถานะการเชื่อมต่อ |
+| 06 Share Configuration | Copy/Paste JSON เพื่อย้าย config ข้ามเครื่อง |
+| 07 Data | ปุ่ม Clear all local data |
 
 ---
 
@@ -171,13 +172,16 @@ npm run build    # production build
 
 ## Skills (Built-in)
 
-| Skill | หน้าที่ |
-|---|---|
-| `mqtt_publish` | publish payload ไปยัง device topic |
-| `mqtt_read` | อ่านค่าล่าสุดจาก sensor topic |
-| `os_command` | แปลภาษาคนเป็น terminal command แล้วส่งไปยัง os_terminal device |
+| Skill | หน้าที่ | ต้องการ |
+|---|---|---|
+| `mqtt_publish` | publish payload ไปยัง device topic | MQTT |
+| `mqtt_read` | อ่านค่าล่าสุดจาก sensor topic | MQTT |
+| `os_command` | แปลภาษาคนเป็น terminal command แล้วส่งไปยัง os_terminal device | MQTT |
+| `web_search` | ค้นหาข้อมูลจากอินเทอร์เน็ตผ่าน Serper API | Serper API Key |
 
 เพิ่ม custom skill ได้ที่ Settings → Section 03 — กำหนด name, description, JSON Schema ได้อิสระ
+
+> **web_search** ต้องใส่ Serper API Key ที่ Settings → 04 Integrations · รับ key ฟรีได้ที่ [serper.dev](https://serper.dev) (Free tier: 2,500 queries)
 
 ---
 

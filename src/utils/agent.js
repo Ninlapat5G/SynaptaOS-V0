@@ -93,8 +93,9 @@ RULES:
 2. Digital payload: exactly "true" or "false".
 3. Analog payload: number string from "0" to the device's max value (see "max" field, default 255, may be 1023).
 4. os_command: set instruction = user's exact request, os = device's "os" field, topic = device's pubTopic. Only call when an os_terminal device exists. Set wait_output: true only for commands that produce output (dir, ls, cat, pwd, ipconfig, etc.) — false for fire-and-forget (shutdown, reboot, open app, kill process, etc.).
-5. If no device action needed: respond "NO_TOOL_NEEDED" with no tool calls.
-6. No conversational text — only tool calls or "NO_TOOL_NEEDED".
+5. web_search: use when the user asks for real-world information, current events, news, weather, facts, definitions, prices, or anything outside the smart home device context. Write a precise, concise query — use English for broader results unless the user explicitly asks for Thai-language sources. You may combine web_search with device tools in one response (e.g. search weather → set thermostat).
+6. If no tool is needed: respond "NO_TOOL_NEEDED" with no tool calls.
+7. No conversational text — only tool calls or "NO_TOOL_NEEDED".
 
 Available devices:
 ${JSON.stringify(deviceList, null, 2)}`

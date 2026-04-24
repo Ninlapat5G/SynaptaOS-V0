@@ -250,10 +250,32 @@ export default function SettingsPage({ settings, onSave, mqttStatus = 'offline',
             </div>
           </section>
 
-          {/* 04 MQTT Broker */}
+          {/* 04 Integrations */}
           <section className="sh-sect">
             <div className="sh-sect-head">
               <div className="sh-sect-num mono">04</div>
+              <div><h3>Integrations</h3><p>API Keys สำหรับ skills ที่ต้องการบริการภายนอก</p></div>
+            </div>
+            <div className="sh-field">
+              <label className="mono">
+                Serper API Key
+                <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--ink-xdim)', fontWeight: 400 }}>
+                  web_search skill · รับ key ฟรีที่ serper.dev · Free tier: 2,500 queries
+                </span>
+              </label>
+              <input
+                type="password"
+                value={s.serperApiKey || ''}
+                onChange={e => set('serperApiKey', e.target.value)}
+                placeholder="•••••••••••••••••••••••••••••••••••••••••"
+              />
+            </div>
+          </section>
+
+          {/* 05 MQTT Broker */}
+          <section className="sh-sect">
+            <div className="sh-sect-head">
+              <div className="sh-sect-num mono">05</div>
               <div><h3>MQTT Broker</h3><p>Event bus สำหรับรับ/ส่งสัญญาณอุปกรณ์ แบบ real-time · QoS 2</p></div>
             </div>
             <div className="sh-grid2">
@@ -279,10 +301,10 @@ export default function SettingsPage({ settings, onSave, mqttStatus = 'offline',
             </div>
           </section>
 
-          {/* 05 Share Configuration */}
+          {/* 06 Share Configuration */}
           <section className="sh-sect">
             <div className="sh-sect-head">
-              <div className="sh-sect-num mono">05</div>
+              <div className="sh-sect-num mono">06</div>
               <div>
                 <h3>Share Configuration</h3>
                 <p>คัดลอกหรือวาง JSON เพื่อย้าย Settings, Devices และ Areas ข้ามเครื่อง</p>
@@ -304,10 +326,10 @@ export default function SettingsPage({ settings, onSave, mqttStatus = 'offline',
             </div>
           </section>
 
-          {/* 06 Data */}
+          {/* 07 Data */}
           <section className="sh-sect">
             <div className="sh-sect-head">
-              <div className="sh-sect-num mono">06</div>
+              <div className="sh-sect-num mono">07</div>
               <div>
                 <h3>Data</h3>
                 <p>จัดการข้อมูลที่บันทึกไว้ใน localStorage — Settings, Devices, Areas</p>

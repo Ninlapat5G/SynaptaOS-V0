@@ -9,6 +9,8 @@
 //   2. Register it in toolHandlers map
 //   3. Add its definition to DEFAULT_SETTINGS.skills in data.js
 
+const SERPER_URL = 'https://google.serper.dev/search'
+
 async function mqttPublish(args, ctx) {
   const { mqttClient, devicesRef, baseTopicRef, setDevices, normalizeBase, buildFullTopic } = ctx
 
@@ -88,12 +90,56 @@ async function osCommand(args, ctx) {
   return { success: true, topic: fullTopic, command, os, ...(output != null && { output }) }
 }
 
+async function webSearch(args, ctx) {
+  const { settings } = ctx
+  const { query } = args
+
+  if (!query) return { success: false, error: 'No search query provided' }
+
+  const apiKey = settings.serperApiKey
+  if (!apiKey) return { success: false, error: 'Serper API key ยังไม่ได้ตั้งค่า — ไปที่ Settings → Integrations' }
+
+  let res
+  try {
+    res = await fetch(SERPER_URL, {
+      method: 'POST',
+      headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ q: query, num: 5 }),
+    })
+  } catch (err) {
+    return { success: false, error: `Network error: ${err.message}` }
+  }
+
+  if (res.status === 403) return { success: false, error: 'Serper API key ไม่ถูกต้อง หรือ quota หมดแล้ว — ตรวจสอบที่ serper.dev/dashboard' }
+  if (res.status === 429) return { success: false, error: 'Serper API rate limit exceeded — ลองใหม่อีกสักครู่' }
+  if (!res.ok)            return { success: false, error: `Serper API error: HTTP ${res.status}` }
+
+  const data = await res.json()
+
+  // Extract answerBox / knowledgeGraph (direct answers)
+  const direct = []
+  if (data.answerBox?.answer)   direct.push({ type: 'answer',    content: data.answerBox.answer })
+  else if (data.answerBox?.snippet) direct.push({ type: 'answer', content: data.answerBox.snippet })
+  if (data.knowledgeGraph?.description)
+    direct.push({ type: 'knowledge', title: data.knowledgeGraph.title, content: data.knowledgeGraph.description })
+
+  // Top organic results
+  const organic = (data.organic || []).slice(0, 5).map(r => ({
+    title:   r.title,
+    snippet: r.snippet,
+    url:     r.link,
+  }))
+
+  return { success: true, query, direct, organic }
+}
+
 // ── Registry ───────────────────────────────────────────────────────────────────
 
 const toolHandlers = {
   mqtt_publish: mqttPublish,
   mqtt_read:    mqttRead,
   os_command:   osCommand,
+  web_search:   webSearch,
 }
 
 // ── Factory ────────────────────────────────────────────────────────────────────

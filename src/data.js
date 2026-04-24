@@ -29,6 +29,7 @@ export const DEFAULT_SETTINGS = {
   systemPrompt:
     'คุณคือ AI ผู้ช่วยบ้านอัจฉริยะ (Smart Home Assistant) นิสัยเป็นกันเอง ร่าเริง ชอบช่วยเหลือ ตอบคำถามด้วยภาษาที่เข้าใจง่าย สั้น กระชับ ไม่ต้องอธิบายเรื่องเทคนิค และมักจะใช้ Emoji ประกอบเสมอ',
   profile: { name: 'Mira K.' },
+  serperApiKey: '',
   skills: [
     {
       id: 'sensor_read',
@@ -52,6 +53,14 @@ export const DEFAULT_SETTINGS = {
       enabled: true,
       schema:
         '{"type":"object","properties":{"instruction":{"type":"string","description":"Natural language description of what to do on the remote machine"},"os":{"type":"string","enum":["windows","mac","linux"],"description":"Target operating system"},"topic":{"type":"string","description":"MQTT pubTopic of the target os_terminal device"},"wait_output":{"type":"boolean","description":"True if the command is expected to return output (e.g. dir, ls, cat). False for fire-and-forget commands (e.g. shutdown, reboot, open app)."}},"required":["instruction","os","topic","wait_output"]}',
+    },
+    {
+      id: 'web_search',
+      name: 'web_search',
+      description: 'Search the web for real-world information, current events, news, facts, or anything outside the smart home device context. Requires Serper API key in Settings → Integrations.',
+      enabled: true,
+      schema:
+        '{"type":"object","properties":{"query":{"type":"string","description":"Concise and specific search query"}},"required":["query"]}',
     },
   ],
   mqtt: {
