@@ -15,7 +15,7 @@
 
 ## Architecture
 
-```
+```text
 ผู้ใช้พิมพ์/พูด
        │
        ▼
@@ -29,6 +29,12 @@
 │       │        ▼                │
 │  [tool_executor]                │
 │   รัน skill ตาม tool calls      │
+│       │                         │
+│       └──────────────┐          │
+│                      ▼          │
+│  [planner]  temp=0.1            │
+│   วิเคราะห์ผลลัพธ์รอบแรก        │
+│   (ลบ tool ที่ใช้แล้วทิ้งกันหลอน)  │
 │       │                         │
 │       └──────────────┐          │
 │                      ▼          │
@@ -51,7 +57,7 @@ Device Cards อัปเดต real-time (MQTT QoS 2)
 | Animation | Framer Motion (spring, stagger, AnimatePresence, useMotionValue) |
 | IoT Protocol | MQTT over WebSocket — `mqtt.js` v5 · **QoS 2** · auto-reconnect |
 | AI / LLM | OpenAI-compatible API (ค่าเริ่มต้น: Typhoon 2.5 · 30B MoE · รองรับ tool calling) |
-| Agent | Mini graph engine — router → tool_executor → responder |
+| Agent | Mini graph engine — router → tool_executor → planner → responder |
 | Voice | Web Speech API (Chrome/Edge) |
 | Storage | `localStorage` — ไม่มี backend |
 | Deployment | Vercel (static site) |
@@ -60,7 +66,7 @@ Device Cards อัปเดต real-time (MQTT QoS 2)
 
 ## โครงสร้างโปรเจค
 
-```
+```text
 src/
 ├── App.jsx                   # Root — orchestrates state, MQTT, tools
 ├── data.js                   # ค่าเริ่มต้น (devices, settings, areas, tweaks)
@@ -69,8 +75,8 @@ src/
 │   ├── useMQTT.js            # MQTT connection, publish, sensorCache, waitForMessage
 │   └── useChat.js            # Chat messages, agent loop, streaming, history limit
 ├── utils/
-│   ├── agent.js              # Graph engine + LLM client + os command generator
-│   ├── agentSkills.js        # Skill handlers (mqtt_publish, mqtt_read, os_command)
+│   ├── agent.js              # Graph engine + LLM client + os command generator + strict filtering
+│   ├── agentSkills.js        # Skill handlers (mqtt_publish, mqtt_read, os_command, web_search)
 │   ├── mqttTopic.js          # normalizeBase / buildFullTopic helpers
 │   └── storage.js            # localStorage helpers
 └── components/
@@ -132,7 +138,7 @@ npm run build    # production build
 |---|---|
 | `เปิดไฟห้องนั่งเล่น` | publish `true` ไปที่ lamp |
 | `หรี่แสงลงครึ่งนึง` | คำนวณ `max/2` แล้ว publish |
-| `ปิดไฟทั้งบ้าน` | หลาย tool calls ในคำสั่งเดียว |
+| `ปิดไฟทั้งบ้าน` | หลาย tool calls ในคำสั่งเดียว (Parallel execution) |
 | `ตอนนี้ไฟเปิดกี่ดวง` | อ่าน state จาก context ตอบทันที ไม่เรียก tool |
 
 ### หน้า Settings
@@ -166,9 +172,9 @@ npm run build    # production build
 ### Planner Node — ตัดสินใจ Round 2
 
 - รับ history ครบ: tool ที่รันไป + args + result ทุกตัว
-- ข้าม planner อัตโนมัติถ้า round 1 มีแค่ mqtt_publish (ไม่มีข้อมูลให้คิด)
-- `web_search` ถูก filter ออกจาก tool list ของ planner เสมอ — search ได้ครั้งเดียวต่อคำสั่ง
-- ตัดสินใจได้ 2 แบบ: เรียก device tool ต่อจากผล search/sensor หรือ DONE
+- ข้าม planner อัตโนมัติถ้า round 1 มีแค่ mqtt_publish ล้วนๆ (ไม่มีข้อมูลใหม่ให้คิด)
+- **Strict Guardrail:** `web_search` และ `mqtt_publish` จะถูกยึดคืน (filter ออกจาก tool list ทันที) หากเคยถูกเรียกไปแล้วในรอบก่อนหน้า เพื่อป้องกันโมเดลขนาดเล็ก (SLM) เกิดอาการหลอน สั่งงานซ้ำซ้อน หรือไปรบกวนอุปกรณ์อื่นที่ผู้ใช้ไม่ได้สั่ง
+- ตัดสินใจได้ 2 แบบ: เรียก device tool เพิ่มเติมต่อจากผล search/sensor หรือคืนค่า DONE เพื่อจบงาน
 
 ### Responder Node — ตอบผู้ใช้
 
