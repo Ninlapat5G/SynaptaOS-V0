@@ -91,10 +91,10 @@ function buildTools(settings) {
 
 function shouldRunPlanner(toolResults) {
   return toolResults.some(r => {
-    if (r.result?.error !== undefined)   return true  // any failure → planner may recover
-    if (r.result?.value !== undefined)   return true  // mqtt_read returned sensor data
+    if (r.result?.error !== undefined) return true  // any failure → planner may recover
+    if (r.result?.value !== undefined) return true  // mqtt_read returned sensor data
     if (r.result?.organic !== undefined) return true  // web_search returned results
-    if (r.result?.output !== undefined)  return true  // os_command returned output
+    if (r.result?.output !== undefined) return true  // os_command returned output
     return false
     // mqtt_publish success: { success, topic, payload } — nothing to reason about
   })
@@ -178,36 +178,38 @@ async function plannerNode(state) {
 
   const executedNames = new Set(allToolResults.map(r => r.name))
 
-  // Hard filter: web_search may only run once — remove it from planner's tool list if already executed
-  const tools = buildTools(settings).filter(
-    t => !(executedNames.has('web_search') && t.function.name === 'web_search')
-  )
+  // ตัด Tool ทิ้งแบบถอนรากถอนโคน ถ้าเคยเรียกแล้วห้ามมีให้เลือกอีก
+  const tools = buildTools(settings).filter(t => {
+    const toolName = t.function.name
+    if (toolName === 'web_search' && executedNames.has('web_search')) return false
+    if (toolName === 'mqtt_publish' && executedNames.has('mqtt_publish')) return false
+    return true
+  })
 
-  // Full history: name + args + result — needed to avoid repeating same call
+  // Full history: name + args + result
   const executedHistory = allToolResults.map(r => ({
-    tool:   r.name,
-    args:   r.args,
+    tool: r.name,
+    args: r.args,
     result: r.result,
   }))
 
-  // Targeted guidance when search results are present
   const searchDone = executedNames.has('web_search')
   const postSearchNote = searchDone ? `
 [Post-search decision]
 web_search has run — do NOT search again under any circumstances.
 Look at the search results above and decide ONE of:
-A) A specific device action can be derived from the data (e.g. temperature value → set AC topic, brightness level → set dimmer) → call that device tool with the extracted value.
-B) The results are informational only and no device action is needed → DONE.` : ''
+A) A specific device action can be derived from the data → call that device tool.
+B) The results are informational only → DONE.` : ''
 
+  // System Prompt แบบดุดัน ไม่เกรงใจ SLM
   const systemPrompt = `You are a Reactive Planner. Round ${toolRound} of tool execution just completed.
-Decide whether a follow-up device action is needed to fully satisfy the user's request.
+Decide whether a follow-up device action is strictly necessary to fully satisfy the user's request.
 
-RULES:
-1. DEFAULT TO DONE — stop if results are sufficient to answer the user.
-2. Only proceed if results contain a specific value required to complete a device action the user asked for.
-3. Never repeat a call with the same tool + args already in [Already executed].
-4. Do not verify, confirm, or re-read anything already executed.
-5. No conversational text — only tool calls (= continue) or no tool calls (= DONE).
+CRITICAL RULES:
+1. STRICTLY MATCH USER INTENT: Only select tools for devices the user explicitly asked to control in the "Original request".
+2. DO NOT GUESS OR INVENT ACTIONS: If the target device is not found, or the requested action is already in [Already executed], YOU MUST STOP. Do not control other unrequested devices.
+3. DEFAULT TO DONE: If the requested actions are complete, or no further tools match the user's exact instruction, return NO TOOL CALLS (which means DONE).
+4. No conversational text — only tool calls (= continue) or no tool calls (= DONE).
 ${postSearchNote}
 
 Original request: "${text}"
@@ -261,7 +263,6 @@ ${toolContext}`
 
   let reply = ''
 
-  // 🐛 มักแก้ตรงนี้: ให้โยน Error ทุกอย่างรวมถึง AbortError ออกไปเลย ไม่ต้องอมไว้!
   await llm.stream(
     [{ role: 'system', content: systemPrompt }, ...apiHistory, { role: 'user', content: text }],
     { temperature: 0.7, max_tokens: 4096 },
@@ -276,35 +277,31 @@ ${toolContext}`
 
 const agentGraph = createGraph({
   nodes: {
-    router:       routerNode,
+    router: routerNode,
     toolExecutor: toolExecutorNode,
-    planner:      plannerNode,
-    responder:    responderNode,
+    planner: plannerNode,
+    responder: responderNode,
   },
   edges: {
-    router:       state => state.toolCalls.length > 0 ? 'toolExecutor' : 'responder',
+    router: state => state.toolCalls.length > 0 ? 'toolExecutor' : 'responder',
     // Skip planner if no tool returned meaningful data to reason about
     toolExecutor: state => shouldRunPlanner(state.toolResults) ? 'planner' : 'responder',
-    planner:      state => (state.toolCalls.length > 0 && state.toolRound < 2) ? 'toolExecutor' : 'responder',
+    planner: state => (state.toolCalls.length > 0 && state.toolRound < 2) ? 'toolExecutor' : 'responder',
   },
   entry: 'router',
 })
 
 // ── Public API ─────────────────────────────────────────────────────────────────
-// params: { text, settings, deviceList, apiHistory, executeTool, onStream, onToolCall, onToolResult, signal }
-// returns: { ...state, reply }
 
 export const runAgent = params => agentGraph.run({
-  toolCalls:      [],
-  toolResults:    [],
+  toolCalls: [],
+  toolResults: [],
   allToolResults: [],
-  toolRound:      0,
+  toolRound: 0,
   ...params,
 })
 
 // ── OS Command Generator ───────────────────────────────────────────────────────
-// Translates a natural-language instruction into an exact terminal command.
-// Returns the raw command string, or throws if the instruction is unsafe/empty.
 
 const OS_COMMAND_SYSTEM = `You are a terminal command translator for remote machine control via MQTT.
 Convert the user's instruction into the exact terminal command for the target OS.
