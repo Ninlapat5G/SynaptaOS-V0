@@ -112,10 +112,11 @@ RULES:
 1. mqtt_publish: use the EXACT pubTopic from the device list — never shorten or invent topics.
 2. Digital payload: exactly "true" or "false".
 3. Analog payload: number string from "0" to the device's max value (see "max" field, default 255, may be 1023).
-4. os_command: set instruction = user's exact request, os = device's "os" field, topic = device's pubTopic. Only call when an os_terminal device exists. Set wait_output: true only for commands that produce output (dir, ls, cat, pwd, ipconfig, etc.) — false for fire-and-forget (shutdown, reboot, open app, kill process, etc.).
-5. web_search: use when the user asks for real-world information outside the device context (news, weather, prices, facts, definitions). Write a precise English query unless Thai sources are explicitly requested.
-6. If no tool is needed: return no tool calls.
-7. No conversational text — only tool calls or nothing.
+4. mqtt_read: use ONLY when the user explicitly asks to READ or CHECK a sensor/device value. Never call mqtt_read to verify a publish action — trust publish success.
+5. os_command: set instruction = user's exact request, os = device's "os" field, topic = device's pubTopic. Only call when an os_terminal device exists. Set wait_output: true only for commands that produce output (dir, ls, cat, pwd, ipconfig, etc.) — false for fire-and-forget (shutdown, reboot, open app, kill process, etc.).
+6. web_search: use when the user asks for real-world information outside the device context (news, weather, prices, facts, definitions). Write a precise English query unless Thai sources are explicitly requested.
+7. If no tool is needed: return no tool calls.
+8. No conversational text — only tool calls or nothing.
 
 Available devices:
 ${JSON.stringify(deviceList, null, 2)}`
@@ -179,25 +180,19 @@ async function plannerNode(state) {
 
   const executedTools = allToolResults.map(r => r.name)
 
-  const systemPrompt = `You are a Reactive Planner. Round ${toolRound} of tool execution just completed.
-Your job: reason about what was just learned and decide whether a meaningful follow-up action is needed.
-
-THINK through these questions:
-- What did the results reveal that wasn't known before?
-- Does the user's original intent imply a next step that only makes sense now, after seeing these results?
-- Would skipping the follow-up leave the user's request partially fulfilled?
+  const systemPrompt = `You are a Reactive Planner. Round ${toolRound} tool execution just completed.
+Decide if a follow-up action is needed based on the results below.
 
 RULES:
-1. DEFAULT TO DONE — if the results are sufficient to answer the user, stop here.
-2. Only proceed if a concrete, purposeful next action can be derived from the results — not just because a tool is available.
-3. You may call any combination of tools (device control, search, OS command, sensor read) based on your reasoning.
-4. Extract specific values from results when setting devices (e.g. derive temperature, brightness, state from data).
-5. Never call any tool already executed: [${executedTools.join(', ') || 'none'}]
-6. No conversational text — only tool calls (= continue) or no tool calls (= DONE).
+1. DONE by default — only proceed if the user's request CANNOT be fulfilled without a follow-up action.
+2. Valid reason to proceed: a result contains a specific value (e.g. sensor reading, search data) that the user's request requires to complete a device action.
+3. Invalid reasons: verifying success, confirming a state that was just set, curiosity, or "it might be useful".
+4. Already executed — do NOT call again: [${executedTools.join(', ') || 'none'}]
+5. No conversational text — only tool calls (= proceed) or no tool calls (= DONE).
 
 Original request: "${text}"
 
-Results from round ${toolRound}:
+Round ${toolRound} results:
 ${JSON.stringify(allToolResults, null, 2)}
 
 Available devices:
