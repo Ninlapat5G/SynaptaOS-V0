@@ -175,29 +175,44 @@ async function toolExecutorNode(state) {
 async function plannerNode(state) {
   const { text, settings, deviceList, allToolResults, toolRound, signal } = state
   const llm = createLLMClient(settings)
-  const tools = buildTools(settings)
 
-  // Full history: name + args + result — planner needs complete context to avoid repeating
+  const executedNames = new Set(allToolResults.map(r => r.name))
+
+  // Hard filter: web_search may only run once — remove it from planner's tool list if already executed
+  const tools = buildTools(settings).filter(
+    t => !(executedNames.has('web_search') && t.function.name === 'web_search')
+  )
+
+  // Full history: name + args + result — needed to avoid repeating same call
   const executedHistory = allToolResults.map(r => ({
     tool:   r.name,
     args:   r.args,
     result: r.result,
   }))
 
+  // Targeted guidance when search results are present
+  const searchDone = executedNames.has('web_search')
+  const postSearchNote = searchDone ? `
+[Post-search decision]
+web_search has run — do NOT search again under any circumstances.
+Look at the search results above and decide ONE of:
+A) A specific device action can be derived from the data (e.g. temperature value → set AC topic, brightness level → set dimmer) → call that device tool with the extracted value.
+B) The results are informational only and no device action is needed → DONE.` : ''
+
   const systemPrompt = `You are a Reactive Planner. Round ${toolRound} of tool execution just completed.
-Decide whether a meaningful follow-up action is needed to fully satisfy the user's request.
+Decide whether a follow-up device action is needed to fully satisfy the user's request.
 
 RULES:
-1. DEFAULT TO DONE — stop here if the results are sufficient to answer the user.
-2. Only proceed if the results reveal data that is required to complete a device action the user asked for.
-3. Valid reason: a search/sensor result contains a value needed to set a device (e.g. weather temp → set AC).
-4. Invalid reasons: verifying success, re-reading something already read, confirming a state just set.
-5. Never repeat a call with the same tool + args as any entry in [Already executed] below.
-6. No conversational text — only tool calls (= continue) or no tool calls (= DONE).
+1. DEFAULT TO DONE — stop if results are sufficient to answer the user.
+2. Only proceed if results contain a specific value required to complete a device action the user asked for.
+3. Never repeat a call with the same tool + args already in [Already executed].
+4. Do not verify, confirm, or re-read anything already executed.
+5. No conversational text — only tool calls (= continue) or no tool calls (= DONE).
+${postSearchNote}
 
 Original request: "${text}"
 
-Already executed (name · args · result):
+Already executed (tool · args · result):
 ${JSON.stringify(executedHistory, null, 2)}
 
 Available devices:

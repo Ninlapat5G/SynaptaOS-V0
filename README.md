@@ -155,13 +155,20 @@ npm run build    # production build
 
 - ได้รับ device list ทั้งหมด (JSON) + skills ที่เปิดใช้งาน
 - `temperature=0.1` เพื่อความแม่นยำ
-- คืน `tool_calls[]` หรือ `"NO_TOOL_NEEDED"` เท่านั้น — ไม่มีคำพูดภาษาคน
+- คืน `tool_calls[]` เท่านั้น — ไม่มีคำพูดภาษาคน
 
 ### Tool Executor Node — รันจริง
 
 - รัน tool calls **พร้อมกันทั้งหมด** (Promise.all) — tools ที่ independent ไม่ต้องรอกัน
 - UI แสดง ToolPill แต่ละตัวพร้อมกัน พร้อม label `R1` / `R2` บอก round
 - logic แต่ละ skill อยู่ใน `agentSkills.js` แยกต่างหาก — เพิ่ม skill ใหม่ไม่ต้องแตะ App.jsx
+
+### Planner Node — ตัดสินใจ Round 2
+
+- รับ history ครบ: tool ที่รันไป + args + result ทุกตัว
+- ข้าม planner อัตโนมัติถ้า round 1 มีแค่ mqtt_publish (ไม่มีข้อมูลให้คิด)
+- `web_search` ถูก filter ออกจาก tool list ของ planner เสมอ — search ได้ครั้งเดียวต่อคำสั่ง
+- ตัดสินใจได้ 2 แบบ: เรียก device tool ต่อจากผล search/sensor หรือ DONE
 
 ### Responder Node — ตอบผู้ใช้
 
