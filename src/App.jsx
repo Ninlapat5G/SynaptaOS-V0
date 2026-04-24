@@ -5,7 +5,7 @@ import { initialDevices, DEFAULT_SETTINGS, INITIAL_AREAS, INITIAL_TWEAKS } from 
 import { saveSettings, loadSettings, saveDevices, loadDevices, saveAreas, loadAreas, clearAll } from './utils/storage'
 import { normalizeBase, buildFullTopic } from './utils/mqttTopic'
 import { generateOsCommand } from './utils/agent'
-import { createExecuteTool } from './utils/tools'
+import { createExecuteTool } from './utils/agentSkills'
 import { useMQTT } from './hooks/useMQTT'
 import { useChat } from './hooks/useChat'
 
