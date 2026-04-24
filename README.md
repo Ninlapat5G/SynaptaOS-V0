@@ -159,7 +159,8 @@ npm run build    # production build
 
 ### Tool Executor Node — รันจริง
 
-- Loop ทุก tool call ตามลำดับ (delay 600ms ให้ UI แสดง ToolPill)
+- รัน tool calls **พร้อมกันทั้งหมด** (Promise.all) — tools ที่ independent ไม่ต้องรอกัน
+- UI แสดง ToolPill แต่ละตัวพร้อมกัน พร้อม label `R1` / `R2` บอก round
 - logic แต่ละ skill อยู่ใน `agentSkills.js` แยกต่างหาก — เพิ่ม skill ใหม่ไม่ต้องแตะ App.jsx
 
 ### Responder Node — ตอบผู้ใช้

@@ -141,27 +141,28 @@ ${JSON.stringify(deviceList, null, 2)}`
 async function toolExecutorNode(state) {
   const { toolCalls, executeTool, onToolCall, onToolResult } = state
   const round = (state.toolRound || 0) + 1   // 1-indexed label for UI
-  const toolResults = []
 
-  for (const tc of toolCalls) {
-    const name = tc.function.name
-    let args = {}
-    try { args = JSON.parse(tc.function.arguments || '{}') } catch { args = tc.function.arguments }
+  // Run all tool calls in parallel — independent tools don't need to wait for each other
+  const toolResults = await Promise.all(
+    toolCalls.map(async tc => {
+      const name = tc.function.name
+      let args = {}
+      try { args = JSON.parse(tc.function.arguments || '{}') } catch { args = tc.function.arguments }
 
-    onToolCall?.(name, args, round)
-    await new Promise(r => setTimeout(r, 600)) // หน่วงให้ UI ดูสมูท
+      onToolCall?.(name, args, round)
 
-    let result
-    try {
-      result = await executeTool(name, args)
-    } catch (err) {
-      console.error(`[Agent] Tool execution failed for ${name}:`, err)
-      result = { error: err.message || 'Execution failed' }
-    }
+      let result
+      try {
+        result = await executeTool(name, args)
+      } catch (err) {
+        console.error(`[Agent] Tool execution failed for ${name}:`, err)
+        result = { error: err.message || 'Execution failed' }
+      }
 
-    onToolResult?.(name, args, result, round)
-    toolResults.push({ name, args, result })
-  }
+      onToolResult?.(name, args, result, round)
+      return { name, args, result }
+    })
+  )
 
   return {
     ...state,
