@@ -2,10 +2,10 @@ import { useState, useCallback, useRef } from 'react'
 import { runAgent } from '../utils/agent'
 
 export function useChat({ settings, devicesRef, executeTool }) {
-  const [messages, setMessages]   = useState([])
+  const [messages, setMessages]     = useState([])
   const [apiHistory, setApiHistory] = useState([])
-  const [thinking, setThinking]   = useState(false)
-  const [executing, setExecuting] = useState([])   // array — multiple tools run in parallel
+  const [thinking, setThinking]     = useState(false)
+  const [executing, setExecuting]   = useState(null)
 
   const abortControllerRef = useRef(null)
 
@@ -28,7 +28,7 @@ export function useChat({ settings, devicesRef, executeTool }) {
 
     setMessages(prev => [...prev, { role: 'user', text }])
     setThinking(true)
-    setExecuting([])
+    setExecuting(null)
 
     abortControllerRef.current = new AbortController()
 
@@ -40,22 +40,15 @@ export function useChat({ settings, devicesRef, executeTool }) {
         apiHistory,
         executeTool,
         signal: abortControllerRef.current.signal,
-
         onToolCall: (name, args, round) => {
           setThinking(false)
-          setExecuting(prev => [...prev, { name, args, round }])
+          setExecuting({ name, args, round })
         },
-
         onToolResult: (name, args, result, round) => {
+          setExecuting(null)
+          setThinking(true)
           setMessages(prev => [...prev, { role: 'tool', name, args, result, round }])
-          setExecuting(prev => {
-            const next = prev.filter(e => !(e.name === name && e.round === round))
-            // Last tool finished — agent is now thinking (planner or responder)
-            if (next.length === 0) setThinking(true)
-            return next
-          })
         },
-
         onStream: chunk => {
           setThinking(false)
           setMessages(prev => {
@@ -92,7 +85,7 @@ export function useChat({ settings, devicesRef, executeTool }) {
           const last = prev[prev.length - 1]
           if (last?.role === 'ai' && last?.streaming) {
             return [...prev.slice(0, -1), { role: 'ai', text: last.text + '\n\n*— 🛑 หยุดการสร้างข้อความ —*' }]
-          } else if (last?.role === 'user' || executing.length > 0) {
+          } else if (last?.role === 'user' || executing) {
             return [...prev, { role: 'ai', text: '*— 🛑 ยกเลิกการประมวลผล —*' }]
           }
           return prev
@@ -107,7 +100,7 @@ export function useChat({ settings, devicesRef, executeTool }) {
       })
     } finally {
       setThinking(false)
-      setExecuting([])
+      setExecuting(null)
     }
   }, [settings, devicesRef, apiHistory, executeTool])
 

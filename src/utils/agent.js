@@ -91,10 +91,10 @@ function buildTools(settings) {
 
 function shouldRunPlanner(toolResults) {
   return toolResults.some(r => {
-    if (r.result?.error !== undefined)    return true  // any failure → planner may recover
-    if (r.result?.value !== undefined)    return true  // mqtt_read returned sensor data
-    if (r.result?.organic !== undefined)  return true  // web_search returned results
-    if (r.result?.output !== undefined)   return true  // os_command returned output
+    if (r.result?.error !== undefined)   return true  // any failure → planner may recover
+    if (r.result?.value !== undefined)   return true  // mqtt_read returned sensor data
+    if (r.result?.organic !== undefined) return true  // web_search returned results
+    if (r.result?.output !== undefined)  return true  // os_command returned output
     return false
     // mqtt_publish success: { success, topic, payload } — nothing to reason about
   })
@@ -114,13 +114,8 @@ RULES:
 3. Analog payload: number string from "0" to the device's max value (see "max" field, default 255, may be 1023).
 4. os_command: set instruction = user's exact request, os = device's "os" field, topic = device's pubTopic. Only call when an os_terminal device exists. Set wait_output: true only for commands that produce output (dir, ls, cat, pwd, ipconfig, etc.) — false for fire-and-forget (shutdown, reboot, open app, kill process, etc.).
 5. web_search: use when the user asks for real-world information outside the device context (news, weather, prices, facts, definitions). Write a precise English query unless Thai sources are explicitly requested.
-   - If the device action VALUE depends on the search result → call web_search ONLY; the planner will handle the device action after seeing results.
-   - Call device tools alongside web_search only if they are completely independent of the search result.
 6. If no tool is needed: return no tool calls.
-7. If the request is genuinely ambiguous (e.g. unclear which specific device to control among multiple candidates), ask a short clarifying question in the user's language — return it as plain text with no tool calls.
-8. No extra conversational text — only tool calls, a clarifying question, or nothing.
-
-Note: A Reactive Planner runs after tool execution. If a device action depends on what a tool returns, call the information tool first — the planner will handle the consequent action after seeing the results.
+7. No conversational text — only tool calls or nothing.
 
 Available devices:
 ${JSON.stringify(deviceList, null, 2)}`
@@ -140,42 +135,33 @@ ${JSON.stringify(deviceList, null, 2)}`
   const msg = data?.choices?.[0]?.message
   if (!msg) throw new Error('Router returned no response from API')
 
-  const toolCalls = msg.tool_calls || []
-  const content   = msg.content?.trim()
-
-  // No tool calls + has text = clarifying question from router
-  if (!toolCalls.length && content) {
-    return { ...state, toolCalls: [], clarifyQuestion: content }
-  }
-
-  return { ...state, toolCalls }
+  return { ...state, toolCalls: msg.tool_calls || [] }
 }
 
 async function toolExecutorNode(state) {
   const { toolCalls, executeTool, onToolCall, onToolResult } = state
   const round = (state.toolRound || 0) + 1   // 1-indexed label for UI
+  const toolResults = []
 
-  // Run all tool calls in parallel — independent tools don't need to wait for each other
-  const toolResults = await Promise.all(
-    toolCalls.map(async tc => {
-      const name = tc.function.name
-      let args = {}
-      try { args = JSON.parse(tc.function.arguments || '{}') } catch { args = tc.function.arguments }
+  for (const tc of toolCalls) {
+    const name = tc.function.name
+    let args = {}
+    try { args = JSON.parse(tc.function.arguments || '{}') } catch { args = tc.function.arguments }
 
-      onToolCall?.(name, args, round)
+    onToolCall?.(name, args, round)
+    await new Promise(r => setTimeout(r, 600)) // หน่วงให้ UI ดูสมูท
 
-      let result
-      try {
-        result = await executeTool(name, args)
-      } catch (err) {
-        console.error(`[Agent] Tool execution failed for ${name}:`, err)
-        result = { error: err.message || 'Execution failed' }
-      }
+    let result
+    try {
+      result = await executeTool(name, args)
+    } catch (err) {
+      console.error(`[Agent] Tool execution failed for ${name}:`, err)
+      result = { error: err.message || 'Execution failed' }
+    }
 
-      onToolResult?.(name, args, result, round)
-      return { name, args, result }
-    })
-  )
+    onToolResult?.(name, args, result, round)
+    toolResults.push({ name, args, result })
+  }
 
   return {
     ...state,
@@ -233,14 +219,8 @@ ${JSON.stringify(deviceList, null, 2)}`
 }
 
 async function responderNode(state) {
-  const { text, settings, apiHistory, allToolResults = [], deviceList, clarifyQuestion, onStream, signal } = state
+  const { text, settings, apiHistory, allToolResults = [], deviceList, onStream, signal } = state
   const llm = createLLMClient(settings)
-
-  // Shortcut: router generated a clarifying question — stream it directly, skip LLM call
-  if (clarifyQuestion) {
-    onStream?.(clarifyQuestion)
-    return { ...state, reply: clarifyQuestion }
-  }
 
   const toolContext = allToolResults.length
     ? allToolResults.map(t => `Tool ${t.name}: ${JSON.stringify(t.result)}`).join('\n')
@@ -299,11 +279,10 @@ const agentGraph = createGraph({
 // returns: { ...state, reply }
 
 export const runAgent = params => agentGraph.run({
-  toolCalls:        [],
-  toolResults:      [],
-  allToolResults:   [],
-  toolRound:        0,
-  clarifyQuestion:  null,
+  toolCalls:      [],
+  toolResults:    [],
+  allToolResults: [],
+  toolRound:      0,
   ...params,
 })
 

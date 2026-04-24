@@ -100,21 +100,20 @@ export default function ChatPage({
             </>
           )}
 
-          {/* Parallel tool pills — one per running tool */}
           <AnimatePresence>
-            {executing.map(e => (
+            {executing && (
               <ToolPill
-                key={`${e.name}-${e.round}`}
-                name={e.name}
-                args={e.args}
-                round={e.round}
+                key="executing"
+                name={executing.name}
+                args={executing.args}
+                round={executing.round}
                 executing
               />
-            ))}
+            )}
           </AnimatePresence>
 
           <AnimatePresence>
-            {thinking && executing.length === 0 && <TypingBubble key="typing" />}
+            {thinking && !executing && <TypingBubble key="typing" />}
           </AnimatePresence>
         </div>
 
@@ -162,7 +161,7 @@ export default function ChatPage({
             </motion.button>
 
             {/* ปุ่มส่งข้อความ หรือ หยุด */}
-            {(thinking || executing.length > 0) ? (
+            {(thinking || executing) ? (
               <motion.button
                 type="button"
                 className="sh-send"
