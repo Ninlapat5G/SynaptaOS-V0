@@ -31,6 +31,7 @@ export default function App() {
   const [tweaks, setTweaks] = useState(INITIAL_TWEAKS)
   const [tweaksOpen, setTweaksOpen] = useState(false)
   const [page, setPage] = useState(() => localStorage.getItem('sh-page') || 'devices')
+  const [chatDraft, setChatDraft] = useState('')
   const [mobileNavOpen, setMobileNav] = useState(false)
   const [toast, setToast] = useState(null)
 
@@ -317,13 +318,15 @@ export default function App() {
                   <ChatPage
                     messages={messages}
                     onSend={sendMessage}
-                    onStop={stopChat} // ✨ ใส่ onStop เข้าไปให้ ChatPage แล้วฮะ ปุ่มใช้งานได้แน่นอน!
+                    onStop={stopChat}
                     thinking={thinking}
                     executing={executing}
                     onClear={clearChat}
                     modelName={modelShort}
                     skillCount={skillCount}
                     msgCount={messages.filter(m => m.role === 'user').length}
+                    draft={chatDraft}
+                    onDraftChange={setChatDraft}
                   />
                 </ErrorBoundary>
               </motion.div>

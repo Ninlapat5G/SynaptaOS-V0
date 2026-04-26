@@ -6,8 +6,8 @@ import ToolPill from './chat/ToolPill'
 
 export default function ChatPage({
   messages, onSend, onStop, thinking, executing, onClear, modelName, skillCount, msgCount,
+  draft, onDraftChange: setDraft,
 }) {
-  const [draft, setDraft] = useState('')
   const [isListening, setIsListening] = useState(false)
   const scrollRef = useRef(null)
   const recognitionRef = useRef(null)
