@@ -114,18 +114,33 @@ async function routerNode(state) {
   const llm = createLLMClient(settings)
   const tools = buildTools(settings)
 
-  const systemPrompt = `You are an IoT dispatch engine. You call tools only when a device action or explicit information lookup is required.
+  const systemPrompt = `You are a smart home tool dispatcher. Your output is tool calls or nothing.
 
-RETURN EMPTY (no tool calls) for: greetings, small talk, thank-you, questions about yourself, opinions, or any message that does not require controlling a device or fetching external data.
+--- CALL NO TOOLS for these (respond with empty output) ---
+- Greetings or farewells: "hi", "hello", "สวัสดี", "bye"
+- Small talk or opinions: "how are you", "what do you think", "thanks"
+- Questions about yourself as an AI
+- Any message that does not name a device or ask for specific external information
 
-When to call tools:
-1. mqtt_publish — user wants to turn on/off or change a device value. Use EXACT pubTopic from the device list.
-   - Digital: payload = "true" or "false"
-   - Analog: payload = number string between "0" and the device max (default 255)
-2. mqtt_read — user explicitly asks for a sensor reading or current device value.
-3. os_command — user asks to run something on a computer. Only when an os_terminal device exists.
-   - wait_output: true only for commands that return output (ls, dir, cat); false for fire-and-forget (shutdown, open app).
-4. web_search — user explicitly asks to search or look up specific external information (news, weather, prices, facts). Never use for conversation.
+--- CALL mqtt_publish ONLY when ---
+The user wants to change a device state (turn on/off, set value, dim, open, close).
+Use the EXACT pubTopic from the device list. Never invent a topic.
+Digital device payload: "true" (on) or "false" (off).
+Analog device payload: a number string from "0" up to the device's max value.
+
+--- CALL mqtt_read ONLY when ---
+The user asks for the current value or state of a specific sensor or device.
+Trigger words: "what is", "how much", "check", "read", "ค่า", "อุณหภูมิ", "แสง".
+Do NOT call mqtt_read for anything else.
+
+--- CALL os_command ONLY when ---
+The user asks to run a command or program on a remote computer AND an os_terminal device exists in the list.
+wait_output: true for commands that print output (ls, dir, cat, pwd). false for fire-and-forget (shutdown, reboot, open app).
+
+--- CALL web_search ONLY when ---
+The user explicitly asks to search, or asks about current events, weather, or real-world facts that cannot be answered from context.
+Trigger words: "search", "ค้นหา", "weather", "news", "what happened", "ราคา".
+Do NOT call web_search for anything answerable from the conversation.
 
 Available devices:
 ${JSON.stringify(deviceList, null, 2)}`
@@ -194,21 +209,22 @@ async function plannerNode(state) {
     result: r.result,
   }))
 
-  const systemPrompt = `You are a reactive planner. Round ${toolRound} of tool execution just finished.
-Look at what was executed and decide: is the user's request fully handled, or does something concrete remain?
+  const systemPrompt = `You are a completion checker for a smart home agent.
 
-Your output is tool calls for targets not yet handled, or nothing if the work is done.
-The executed history below is your ground truth — anything already there with a success result is done; do not repeat it for the same target.
-Only act on targets the user asked for that are still missing from the history, or on failures that need recovery.
-The conversation above gives you context — use it to understand what the user has been working toward, not to generate any reply.
+User request: "${text}"
 
-Request: "${text}"
-
-Executed so far:
+Tools already executed:
 ${JSON.stringify(executedHistory, null, 2)}
 
 Available devices:
-${JSON.stringify(deviceList, null, 2)}`
+${JSON.stringify(deviceList, null, 2)}
+
+Your only job: check if every target in the user's request has a successful result in the executed list above.
+- If YES → return empty output (no tool calls). The work is done.
+- If a specific target is MISSING from the history → call the tool for that target only.
+- If a tool call FAILED (has an error) → retry it once with corrected arguments if possible.
+- Do NOT call a tool that already has a success result for the same target.
+- Do NOT call any tool that is unrelated to the original request.`
 
   let data
   try {
