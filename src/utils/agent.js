@@ -4,7 +4,14 @@
 
 function createLLMClient({ endpoint, apiKey, model }) {
   const url = `${endpoint}/chat/completions`
-  const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` }
+  const headers = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${apiKey}`,
+    ...(endpoint.includes('openrouter.ai') && {
+      'HTTP-Referer': window.location.origin,
+      'X-Title': 'AIoT Assistant',
+    }),
+  }
   const mdl = model
 
   async function chat(messages, options = {}, signal) {
