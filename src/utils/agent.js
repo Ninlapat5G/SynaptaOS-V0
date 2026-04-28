@@ -140,7 +140,8 @@ function shouldRunPlanner(toolResults) {
   return toolResults.some(r => {
     if (r.result?.error !== undefined) return true  // any failure → planner may recover
     if (r.result?.value !== undefined) return true  // mqtt_read returned sensor data
-    if (r.result?.organic !== undefined) return true  // web_search returned results
+    if (r.result?.organic !== undefined) return true  // web_search (legacy)
+    if (r.result?.summary !== undefined) return true  // web_search (synthesized)
     if (r.result?.output !== undefined) return true  // os_command returned output
     return false
     // mqtt_publish success: { success, topic, payload } — nothing to reason about
@@ -245,12 +246,6 @@ async function plannerNode(state) {
 
   const tools = buildTools(settings)
 
-  const executedHistory = allToolResults.map(r => ({
-    tool: r.name,
-    args: r.args,
-    result: r.result,
-  }))
-
   const systemPrompt = `You are a completion checker. Output tool calls only — no text.
 
 User request: "${text}"
@@ -349,22 +344,7 @@ export const runAgent = params => agentGraph.run({
   ...params,
 })
 
-// ── OS Command Generator ───────────────────────────────────────────────────────
-
-const OS_COMMAND_SYSTEM = `You are a terminal command translator for remote machine control via MQTT.
-Convert the user's instruction into the exact terminal command for the target OS.
-
-Output rules:
-- Return ONLY the raw command string — no explanation, no markdown, no code fences, no quotes
-- Single command per response (pipelines allowed only when necessary)
-
-Safety:
-- If the instruction would destroy system files, format drives, or wipe data → respond with exactly: UNSAFE
-
-Command syntax by OS:
-- windows → Command Prompt (cmd.exe); use PowerShell only if explicitly requested
-- mac     → bash / zsh
-- linux   → POSIX sh / bash`
+// ── Sub-agents ────────────────────────────────────────────────────────────────
 
 export async function synthesizeSearch({ settings, query, results, signal }) {
   const llm = createLLMClient(settings)
@@ -388,6 +368,21 @@ export async function synthesizeSearch({ settings, query, results, signal }) {
   }
   return data?.choices?.[0]?.message?.content?.trim() || null
 }
+
+const OS_COMMAND_SYSTEM = `You are a terminal command translator for remote machine control via MQTT.
+Convert the user's instruction into the exact terminal command for the target OS.
+
+Output rules:
+- Return ONLY the raw command string — no explanation, no markdown, no code fences, no quotes
+- Single command per response (pipelines allowed only when necessary)
+
+Safety:
+- If the instruction would destroy system files, format drives, or wipe data → respond with exactly: UNSAFE
+
+Command syntax by OS:
+- windows → Command Prompt (cmd.exe); use PowerShell only if explicitly requested
+- mac     → bash / zsh
+- linux   → POSIX sh / bash`
 
 export async function generateOsCommand({ settings, instruction, os, signal }) {
   const llm = createLLMClient(settings)
