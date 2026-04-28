@@ -179,37 +179,21 @@ async function plannerNode(state) {
   const { text, settings, deviceList, allToolResults, toolRound, apiHistory = [], signal } = state
   const llm = createLLMClient(settings)
 
-  const executedNames = new Set(allToolResults.map(r => r.name))
+  const tools = buildTools(settings)
 
-  // ตัด Tool ทิ้งแบบถอนรากถอนโคน ถ้าเคยเรียกแล้วห้ามมีให้เลือกอีก
-  const tools = buildTools(settings).filter(t => {
-    const toolName = t.function.name
-    if (toolName === 'web_search' && executedNames.has('web_search')) return false
-    if (toolName === 'mqtt_publish' && executedNames.has('mqtt_publish')) return false
-    return true
-  })
-
-  // Full history: name + args + result
   const executedHistory = allToolResults.map(r => ({
     tool: r.name,
     args: r.args,
     result: r.result,
   }))
 
-  const searchDone = executedNames.has('web_search')
-  const postSearchNote = searchDone ? `
-[Post-search decision]
-web_search has run — do NOT search again under any circumstances.
-Look at the search results above and decide ONE of:
-A) A specific device action can be derived from the data → call that device tool.
-B) The results are informational only → DONE.` : ''
-
   const systemPrompt = `You are a reactive planner. Round ${toolRound} of tool execution just finished.
-Look at what was executed and decide: is the user's request fully handled, or does one specific follow-up action remain?
+Look at what was executed and decide: is the user's request fully handled, or does something concrete remain?
 
-Your output is either a single tool call (if something concrete is still needed) or nothing (if the work is done).
+Your output is tool calls for targets not yet handled, or nothing if the work is done.
+The executed history below is your ground truth — anything already there with a success result is done; do not repeat it for the same target.
+Only act on targets the user asked for that are still missing from the history, or on failures that need recovery.
 The conversation above gives you context — use it to understand what the user has been working toward, not to generate any reply.
-${postSearchNote}
 
 Request: "${text}"
 

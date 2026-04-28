@@ -175,8 +175,8 @@ npm run build    # production build
 - รับ history ครบ: tool ที่รันไป + args + result ทุกตัว + **ประวัติสนทนา 5 รอบล่าสุด**
 - ใช้ประวัติสนทนาเพื่อเข้าใจ intent แบบ multi-turn เช่น "ทำแบบเดิมกับห้องนั่งเล่นด้วย"
 - ข้าม planner อัตโนมัติถ้า round 1 มีแค่ mqtt_publish ล้วนๆ (ไม่มีข้อมูลใหม่ให้คิด)
-- **Strict Guardrail:** `web_search` และ `mqtt_publish` จะถูกยึดคืน (filter ออกจาก tool list ทันที) หากเคยถูกเรียกไปแล้วในรอบก่อนหน้า เพื่อป้องกันโมเดลขนาดเล็ก (SLM) เกิดอาการหลอน สั่งงานซ้ำซ้อน หรือไปรบกวนอุปกรณ์อื่นที่ผู้ใช้ไม่ได้สั่ง
-- ตัดสินใจได้ 2 แบบ: เรียก device tool เพิ่มเติมต่อจากผล search/sensor หรือคืนค่า DONE เพื่อจบงาน
+- **Ground-truth guard:** executed history คือ source of truth — tool ที่ succeed ไปแล้วกับ target เดิมจะไม่ถูกเรียกซ้ำ แต่สามารถเรียก tool เดิมกับ device หรือ topic อื่นได้ถ้า request ยังไม่ครบ
+- ตัดสินใจได้หลายแบบ: เรียก tool เพิ่มสำหรับ target ที่ยังค้าง, recovery จาก failure, หรือคืนค่า DONE เพื่อจบงาน
 
 ### Responder Node — ตอบผู้ใช้
 
