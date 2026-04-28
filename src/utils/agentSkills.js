@@ -31,7 +31,7 @@ async function mqttPublish(args, ctx) {
         setDevices(prev => prev.map(d => {
           if (d.id !== device.id) return d
           if (d.type === 'digital') return { ...d, on: payload === 'true' }
-          if (d.type === 'analog')  return { ...d, value: parseInt(payload, 10) || 0 }
+          if (d.type === 'analog') return { ...d, value: parseInt(payload, 10) || 0 }
           return d
         }))
       }
@@ -51,16 +51,16 @@ async function mqttRead(args, ctx) {
   const val = sensorCache[fullTopic]
 
   if (val !== undefined) return { success: true, topic: fullTopic, value: val }
-  return { success: false, note: `No data cached for topic: ${fullTopic}` }
+  return { success: false, error: `No data cached for topic: ${fullTopic}` }
 }
 
 async function osCommand(args, ctx) {
   const { mqttClient, settings, devicesRef, baseTopicRef,
-          mqttWaitForMessage, normalizeBase, buildFullTopic, generateOsCommand } = ctx
+    mqttWaitForMessage, normalizeBase, buildFullTopic, generateOsCommand } = ctx
 
   const { instruction, os, topic, wait_output } = args
-  if (!mqttClient)                      return { success: false, error: 'MQTT not connected' }
-  if (!instruction || !os || !topic)    return { success: false, error: 'Missing args: instruction, os, topic' }
+  if (!mqttClient) return { success: false, error: 'MQTT not connected' }
+  if (!instruction || !os || !topic) return { success: false, error: 'Missing args: instruction, os, topic' }
 
   let command
   try {
@@ -87,7 +87,9 @@ async function osCommand(args, ctx) {
   }
 
   const output = outputTopic ? await mqttWaitForMessage(outputTopic, 10000) : null
-  return { success: true, topic: fullTopic, command, os, ...(output != null && { output }) }
+
+  if (output != null) return { success: true, summary: `Ran: ${command}\n\n${output}` }
+  return { success: true, summary: `Command executed: ${command}` }
 }
 
 async function webSearch(args, ctx) {
@@ -112,39 +114,38 @@ async function webSearch(args, ctx) {
 
   if (res.status === 403) return { success: false, error: 'Serper API key ไม่ถูกต้อง หรือ quota หมดแล้ว — ตรวจสอบที่ serper.dev/dashboard' }
   if (res.status === 429) return { success: false, error: 'Serper API rate limit exceeded — ลองใหม่อีกสักครู่' }
-  if (!res.ok)            return { success: false, error: `Serper API error: HTTP ${res.status}` }
+  if (!res.ok) return { success: false, error: `Serper API error: HTTP ${res.status}` }
 
   const data = await res.json()
 
-  // Extract answerBox / knowledgeGraph (direct answers)
-  const direct = []
-  if (data.answerBox?.answer)   direct.push({ type: 'answer',    content: data.answerBox.answer })
-  else if (data.answerBox?.snippet) direct.push({ type: 'answer', content: data.answerBox.snippet })
+  const parts = []
+
+  if (data.answerBox?.answer)
+    parts.push(data.answerBox.answer)
+  else if (data.answerBox?.snippet)
+    parts.push(data.answerBox.snippet)
+
   if (data.knowledgeGraph?.description)
-    direct.push({ type: 'knowledge', title: data.knowledgeGraph.title, content: data.knowledgeGraph.description })
+    parts.push(`${data.knowledgeGraph.title}: ${data.knowledgeGraph.description}`)
 
-  // Top organic results
-  const organic = (data.organic || []).slice(0, 5).map(r => ({
-    title:   r.title,
-    snippet: r.snippet,
-    url:     r.link,
-  }))
+  const organic = (data.organic || []).slice(0, 5)
+  if (organic.length)
+    parts.push(organic.map(r => `${r.title}\n${r.snippet}\n${r.link}`).join('\n\n'))
 
-  return { success: true, query, direct, organic }
+  const summary = parts.join('\n\n') || 'No results found'
+  return { success: true, query, summary }
 }
 
 // ── Registry ───────────────────────────────────────────────────────────────────
 
 const toolHandlers = {
   mqtt_publish: mqttPublish,
-  mqtt_read:    mqttRead,
-  os_command:   osCommand,
-  web_search:   webSearch,
+  mqtt_read: mqttRead,
+  os_command: osCommand,
+  web_search: webSearch,
 }
 
 // ── Factory ────────────────────────────────────────────────────────────────────
-// Usage: const executeTool = createExecuteTool(ctx)
-// ctx is built once in App.jsx and passed here — no re-creation unless deps change
 
 export function createExecuteTool(ctx) {
   return async function executeTool(name, args) {

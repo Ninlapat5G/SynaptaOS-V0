@@ -4,14 +4,20 @@
 
 function createLLMClient({ endpoint, apiKey, model }) {
   const url = `${endpoint}/chat/completions`
-  const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` }
-  const mdl = model
+  const headers = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${apiKey}`,
+    ...(endpoint.includes('openrouter.ai') && {
+      'HTTP-Referer': window.location.origin,
+      'X-Title': 'AIoT Assistant',
+    }),
+  }
 
   async function chat(messages, options = {}, signal) {
     const res = await fetch(url, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ model: mdl, messages, ...options }),
+      body: JSON.stringify({ model, messages, ...options }),
       signal
     })
     if (!res.ok) throw new Error(`LLM ${res.status}: ${await res.text()}`)
@@ -22,7 +28,7 @@ function createLLMClient({ endpoint, apiKey, model }) {
     const res = await fetch(url, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ model: mdl, messages, stream: true, ...options }),
+      body: JSON.stringify({ model, messages, stream: true, ...options }),
       signal
     })
     if (!res.ok) throw new Error(`LLM ${res.status}: ${await res.text()}`)
@@ -85,18 +91,98 @@ function buildTools(settings) {
     })
 }
 
+// ── Result Summarizer ─────────────────────────────────────────────────────────
+
+function summarizeResults(allToolResults, deviceList) {
+  return allToolResults.map(r => {
+    const ok = r.result?.error === undefined
+    const icon = ok ? '✅' : '❌'
+    const device = deviceList?.find(d => d.pubTopic === r.args?.topic || d.subTopic === r.args?.topic)
+    const label = device ? `${device.name} (${device.room})` : r.args?.topic || r.args?.query || ''
+
+    switch (r.name) {
+      case 'mqtt_publish':
+        return ok
+          ? `${icon} mqtt_publish → ${label} = ${r.args.payload}`
+          : `${icon} mqtt_publish → ${label} failed: ${r.result.error}`
+      case 'mqtt_read':
+        return ok
+          ? `${icon} mqtt_read → ${label} = ${r.result.value}`
+          : `${icon} mqtt_read → ${label} failed: ${r.result.error}`
+      case 'web_search':
+        return ok
+          ? `${icon} web_search → ${r.result.summary ?? 'got results'}`
+          : `${icon} web_search failed: ${r.result.error}`
+      case 'os_command':
+        return ok
+          ? `${icon} os_command → ${r.result.summary ?? 'executed'}`
+          : `${icon} os_command failed: ${r.result.error}`
+      default:
+        return `${icon} ${r.name}: ${ok ? 'success' : r.result.error}`
+    }
+  }).join('\n')
+}
+
+function summarizeDevices(deviceList) {
+  return (deviceList || [])
+    .map(d => {
+      if (d.type === 'analog')
+        return `${d.name} (${d.room}) — analog, max ${d.max ?? 255}, pubTopic: ${d.pubTopic}`
+      if (d.type === 'os_terminal')
+        return `${d.name} (${d.room}) — os_terminal (${d.os ?? 'unknown OS'}), pubTopic: ${d.pubTopic}`
+      return `${d.name} (${d.room}) — digital, pubTopic: ${d.pubTopic}`
+    })
+    .join('\n') || 'No devices registered'
+}
+
+// ── Responder Tool Context Formatter ─────────────────────────────────────────
+// Plain-text version of tool results for the responder.
+// Unlike summarizeResults (terse, for planner), this preserves full content.
+
+function formatResultsForResponder(allToolResults) {
+  return allToolResults.map(t => {
+    const ok = t.result?.error === undefined
+    if (!ok) return `[${t.name}] Error: ${t.result.error}`
+
+    switch (t.name) {
+      case 'mqtt_publish':
+        return `[${t.name}] Set ${t.args?.topic} = ${t.args?.payload}`
+      case 'mqtt_read':
+        return `[${t.name}] ${t.args?.topic} = ${t.result.value ?? 'no data'}`
+      case 'web_search':
+        return `[${t.name}] Query: ${t.args?.query}\n${t.result.summary}`
+      case 'os_command':
+        return t.result.summary
+          ? `[${t.name}]\n${t.result.summary}`
+          : `[${t.name}] Command executed (no output)`
+      default:
+        return t.result.summary
+          ? `[${t.name}] ${t.result.summary}`
+          : `[${t.name}] success`
+    }
+  }).join('\n\n')
+}
+
 // ── Planner Guard ──────────────────────────────────────────────────────────────
 // Returns true only if tool results contain data worth reasoning about.
 // Pure fire-and-forget tools (mqtt_publish success) skip the planner entirely.
 
 function shouldRunPlanner(toolResults) {
   return toolResults.some(r => {
-    if (r.result?.error !== undefined) return true  // any failure → planner may recover
-    if (r.result?.value !== undefined) return true  // mqtt_read returned sensor data
-    if (r.result?.organic !== undefined) return true  // web_search returned results
-    if (r.result?.output !== undefined) return true  // os_command returned output
+    if (r.result?.error !== undefined) return true   // any failure → planner may recover
+    if (r.result?.value !== undefined) return true   // mqtt_read returned sensor data
+    if (r.result?.summary !== undefined) return true // web_search / os_command with output
     return false
     // mqtt_publish success: { success, topic, payload } — nothing to reason about
+  })
+}
+
+// ── Time Helper ───────────────────────────────────────────────────────────────
+
+function nowString() {
+  return new Date().toLocaleString('en-GB', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+    hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
   })
 }
 
@@ -107,32 +193,42 @@ async function routerNode(state) {
   const llm = createLLMClient(settings)
   const tools = buildTools(settings)
 
-  const systemPrompt = `You are an IoT dispatch engine — silent, invisible, and purely mechanical.
-Your entire output is tool calls. If no tool fits, your output is empty.
+  const systemPrompt = `You are a smart home tool dispatcher. Output tool calls only — no text, no explanation.
+Current date & time: ${nowString()}
 
-The conversation above shows what the user has been doing.
-Draw on it only to resolve what the current message refers to (a device name, a previous topic, a value already mentioned).
+Return EMPTY (no tool calls) when the message is pure conversation: greetings, farewells, thanks, acknowledgements, questions about you as an AI, or opinions unrelated to any device.
 
-Dispatch rules:
-1. mqtt_publish: use the EXACT pubTopic from the device list — never shorten or invent topics.
-2. Digital payload: exactly "true" or "false".
-3. Analog payload: number string from "0" to the device's max value (see "max" field, default 255, may be 1023).
-4. os_command: set instruction = user's exact request, os = device's "os" field, topic = device's pubTopic. Only call when an os_terminal device exists. Set wait_output: true only for commands that produce output (dir, ls, cat, pwd, ipconfig, etc.) — false for fire-and-forget (shutdown, reboot, open app, kill process, etc.).
-5. web_search: use when the user asks for real-world information outside the device context (news, weather, prices, facts, definitions). Write a precise English query unless Thai sources are explicitly requested.
+mqtt_publish — call when the user intends to change a device state. Infer intent from context even without exact keywords.
+  - Direct intents: "turn on the lamp", "ปิดไฟ", "dim to 50%"
+  - Indirect intents: "it's too dark" (implies turn on light), "I'm freezing" (implies turn on heater/turn off AC)
+  Rule: use the EXACT pubTopic from the device list. Digital payload = "true"/"false". Analog payload = number string 0–max.
+
+mqtt_read — call to check the current status or sensor value.
+  - Call for explicit requests ("what's the temp?") OR implicit checks where knowing the state is required to answer.
+
+os_command — call when the user wants to run a command on a remote machine AND an os_terminal device exists.
+  Use the OS shown in the device list (e.g. "os_terminal (windows)") as the "os" argument — do NOT guess.
+  wait_output: true for commands that return output (ls, dir, cat). false for fire-and-forget (shutdown, open app).
+  IMPORTANT: If the command requires opening a URL that is not yet known (e.g. a song, video, website),
+  call web_search FIRST to find the real URL. Do NOT call os_command in the same round — the planner will follow up with the actual URL.
+
+web_search — call when the user explicitly needs current external information that cannot be answered from context.
+  e.g. "search for...", "what's the weather?", "latest news about..."
+  Do NOT call if the answer is already known or the question is conversational.
 
 Available devices:
-${JSON.stringify(deviceList, null, 2)}`
+${summarizeDevices(deviceList)}`
 
   let data
   try {
     data = await llm.chat(
       [{ role: 'system', content: systemPrompt }, ...apiHistory, { role: 'user', content: text }],
-      { tools: tools.length ? tools : undefined, tool_choice: 'auto', temperature: 0.1, max_tokens: 4096 },
+      { ...(tools.length ? { tools, tool_choice: 'auto' } : {}), temperature: 0.1, max_tokens: 4096 },
       signal
     )
   } catch (err) {
     if (err.name === 'AbortError') throw err
-    throw new Error('Router returned no response from API')
+    throw new Error(`Router: ${err.message}`)
   }
 
   const msg = data?.choices?.[0]?.message
@@ -181,38 +277,38 @@ async function plannerNode(state) {
 
   const tools = buildTools(settings)
 
-  const executedHistory = allToolResults.map(r => ({
-    tool: r.name,
-    args: r.args,
-    result: r.result,
-  }))
+  const systemPrompt = `You are a completion checker. Output tool calls only — no text.
 
-  const systemPrompt = `You are a reactive planner. Round ${toolRound} of tool execution just finished.
-Look at what was executed and decide: is the user's request fully handled, or does something concrete remain?
-
-Your output is tool calls for targets not yet handled, or nothing if the work is done.
-The executed history below is your ground truth — anything already there with a success result is done; do not repeat it for the same target.
-Only act on targets the user asked for that are still missing from the history, or on failures that need recovery.
-The conversation above gives you context — use it to understand what the user has been working toward, not to generate any reply.
-
-Request: "${text}"
+User request: "${text}"
 
 Executed so far:
-${JSON.stringify(executedHistory, null, 2)}
+${summarizeResults(allToolResults, deviceList)}
 
 Available devices:
-${JSON.stringify(deviceList, null, 2)}`
+${summarizeDevices(deviceList)}
+
+Check: does every target in the user's intent have a successful result above?
+- All targets done → return empty (no tool calls).
+- A target is missing → call the tool for that specific target only.
+- A call failed → retry once with corrected arguments if fixable.
+- Never repeat a call that already succeeded. Never add calls unrelated to the original request.
+
+Tool chaining rule:
+- If web_search already returned results and the user wants to open a URL on a remote machine:
+  Extract the most relevant URL from the search result and include it verbatim in the instruction.
+  Example instruction: "open this URL in the browser: https://www.youtube.com/watch?v=xxxxx"
+  Do NOT write a vague instruction like "open the song" — the URL must be in the instruction.`
 
   let data
   try {
     data = await llm.chat(
-      [{ role: 'system', content: systemPrompt }, ...apiHistory, { role: 'user', content: text }],
-      { tools: tools.length ? tools : undefined, tool_choice: 'auto', temperature: 0.1, max_tokens: 1024 },
+      [{ role: 'system', content: systemPrompt }, { role: 'user', content: text }],
+      { ...(tools.length ? { tools, tool_choice: 'auto' } : {}), temperature: 0.1, max_tokens: 1024 },
       signal
     )
   } catch (err) {
     if (err.name === 'AbortError') throw err
-    throw new Error('Planner returned no response from API')
+    throw new Error(`Planner: ${err.message}`)
   }
 
   const msg = data?.choices?.[0]?.message
@@ -224,16 +320,17 @@ async function responderNode(state) {
   const llm = createLLMClient(settings)
 
   const toolContext = allToolResults.length
-    ? allToolResults.map(t => `Tool ${t.name}: ${JSON.stringify(t.result)}`).join('\n')
+    ? formatResultsForResponder(allToolResults)
     : 'None — no tools were called'
 
-  const stateSummary = allToolResults.length
+  const stateSummary = allToolResults.length === 0
     ? (deviceList || [])
       .map(d => `- [${d.room}] ${d.name} (${d.type}): ${d.type === 'digital' ? (d.on ? 'ON' : 'OFF') : d.value}`)
       .join('\n') || 'No devices registered'
     : null
 
   const systemPrompt = `${settings.systemPrompt}
+(Current date & time: ${nowString()} — use this when relevant, do not announce it unprompted.)
 
 [User Info]
 Name: "${settings.profile?.name || 'User'}"${stateSummary ? `
@@ -241,7 +338,7 @@ Name: "${settings.profile?.name || 'User'}"${stateSummary ? `
 [Current Home Status]
 ${stateSummary}` : ''}
 
-[Tool Execution Results]
+[Tool Results]
 ${toolContext}`
 
   let reply = ''
@@ -284,22 +381,27 @@ export const runAgent = params => agentGraph.run({
   ...params,
 })
 
-// ── OS Command Generator ───────────────────────────────────────────────────────
+// ── Sub-agents ────────────────────────────────────────────────────────────────
 
-const OS_COMMAND_SYSTEM = `You are a terminal command translator for remote machine control via MQTT.
-Convert the user's instruction into the exact terminal command for the target OS.
+const OS_COMMAND_SYSTEM = `You are a terminal command translator for remote machine control.
+Given a natural-language instruction and a target OS, output the exact terminal command to execute.
 
 Output rules:
 - Return ONLY the raw command string — no explanation, no markdown, no code fences, no quotes
 - Single command per response (pipelines allowed only when necessary)
-
-Safety:
-- If the instruction would destroy system files, format drives, or wipe data → respond with exactly: UNSAFE
+- NEVER invent placeholder values — use only real values from the instruction
+- If asked to open a video/song but no URL is in the instruction → use a YouTube search URL instead:
+  windows: start https://www.youtube.com/results?search_query=song+name
+  mac:     open  https://www.youtube.com/results?search_query=song+name
+  linux:   xdg-open https://www.youtube.com/results?search_query=song+name
 
 Command syntax by OS:
 - windows → Command Prompt (cmd.exe); use PowerShell only if explicitly requested
 - mac     → bash / zsh
-- linux   → POSIX sh / bash`
+- linux   → POSIX sh / bash
+
+Safety:
+- If the instruction would destroy system files, format drives, or wipe data → respond with exactly: UNSAFE`
 
 export async function generateOsCommand({ settings, instruction, os, signal }) {
   const llm = createLLMClient(settings)

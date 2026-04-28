@@ -27,9 +27,11 @@ export function useMQTT({ broker, port, baseTopic, onMessage }) {
         reconnectPeriod: 5000,
       }
 
-      // ดึง port จาก Setting มาใช้จริง
       if (port) {
-        connectOptions.port = parseInt(port, 10)
+        const parsedPort = parseInt(port, 10)
+        if (!isNaN(parsedPort)) {
+          connectOptions.port = parsedPort
+        }
       }
 
       c = mqtt.connect(broker, connectOptions)
@@ -41,7 +43,10 @@ export function useMQTT({ broker, port, baseTopic, onMessage }) {
         c.subscribe(base ? `${base}/#` : '#', { qos: 2 })
       })
       c.on('reconnect', () => setStatus('reconnecting'))
-      c.on('error', () => setStatus('error'))
+      c.on('error', (err) => {
+        console.error('MQTT Connection Error:', err)
+        setStatus('error')
+      })
       c.on('offline', () => setStatus('offline'))
       c.on('close', () => { setStatus('offline'); setClient(null) })
 
@@ -55,7 +60,8 @@ export function useMQTT({ broker, port, baseTopic, onMessage }) {
           listenersRef.current.delete(topic)
         }
       })
-    } catch {
+    } catch (err) {
+      console.error('MQTT Initialization Error:', err)
       setStatus('error')
     }
 
@@ -64,7 +70,6 @@ export function useMQTT({ broker, port, baseTopic, onMessage }) {
     }
   }, [broker, port, baseTopic])
 
-  // Resolves with the message value as soon as it arrives, or null after timeoutMs.
   const waitForMessage = useCallback((fullTopic, timeoutMs = 10000) => {
     return new Promise(resolve => {
       const set = listenersRef.current.get(fullTopic) ?? new Set()

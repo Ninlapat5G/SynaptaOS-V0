@@ -35,15 +35,12 @@ export default function App() {
   const [mobileNavOpen, setMobileNav] = useState(false)
   const [toast, setToast] = useState(null)
 
-  // 🗑️ โละ State ของ QR ออกไปแล้วฮะ
-
   useEffect(() => { localStorage.setItem('sh-page', page) }, [page])
 
   // ── Settings ──────────────────────────────────────────────────────────────────
   const [settings, setSettings] = useState(() => {
     const saved = loadSettings()
     if (!saved) return DEFAULT_SETTINGS
-    // merge skills: keep saved state, append any new default skills not yet in localStorage
     const savedIds = new Set((saved.skills || []).map(s => s.id))
     const mergedSkills = [
       ...(saved.skills || []),
@@ -70,7 +67,7 @@ export default function App() {
   const [newArea, setNewArea] = useState('')
   useEffect(() => { saveAreas(areas) }, [areas])
 
-  // ── MQTT baseTopic ref (always-fresh, avoids stale closure) ──────────────────
+  // ── MQTT baseTopic ref ────────────────────────────────────────────────────────
   const baseTopicRef = useRef(settings.mqtt.baseTopic)
   useEffect(() => { baseTopicRef.current = settings.mqtt.baseTopic }, [settings.mqtt.baseTopic])
 
@@ -91,18 +88,17 @@ export default function App() {
       })
       return matched ? next : prev
     })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // ── MQTT hook ─────────────────────────────────────────────────────────────────
   const { client: mqttClient, status: mqttStatus, sensorCache, publish: mqttPublish, waitForMessage: mqttWaitForMessage } = useMQTT({
     broker: settings.mqtt.broker,
-    port: settings.mqtt.port, // ✨ ส่ง port เข้าไปด้วยเผื่อลืม
+    port: settings.mqtt.port,
     baseTopic: settings.mqtt.baseTopic,
     onMessage: handleMqttMessage,
   })
 
-  // ── Device update (No Pending/Waiting) ──────────────────────────────────────
+  // ── Device update ─────────────────────────────────────────────────────────────
   const updateDevice = useCallback((next, isFinal = true) => {
     setDevices(prev => prev.map(d => d.id === next.id ? next : d))
     if (isFinal && next.pubTopic) {
@@ -115,7 +111,7 @@ export default function App() {
     setDevices(prev => prev.filter(x => x.id !== id))
   }, [])
 
-  // ── Tool executor (called by agent) ───────────────────────────────────────────
+  // ── Tool executor ─────────────────────────────────────────────────────────────
   const executeTool = useCallback(
     createExecuteTool({
       mqttClient, sensorCache, settings, mqttWaitForMessage,
@@ -125,7 +121,7 @@ export default function App() {
     [mqttClient, sensorCache, settings, mqttWaitForMessage]
   )
 
-  // ── Raw MQTT publish (used by OsTerminalCard widget) ─────────────────────────
+  // ── Raw MQTT publish ──────────────────────────────────────────────────────────
   const handleRawPublish = useCallback((topic, payload) => {
     if (!mqttClient || !topic) return
     const base = normalizeBase(baseTopicRef.current)
@@ -134,7 +130,6 @@ export default function App() {
   }, [mqttClient])
 
   // ── Chat hook ─────────────────────────────────────────────────────────────────
-  // ✨ มักดึง stopChat ออกมาแล้วนะฮะ!
   const { messages, thinking, executing, sendMessage, clearChat, stopChat } = useChat({
     settings,
     devicesRef,
@@ -327,6 +322,7 @@ export default function App() {
                     msgCount={messages.filter(m => m.role === 'user').length}
                     draft={chatDraft}
                     onDraftChange={setChatDraft}
+                    assistantName={settings.profile?.assistantName || 'Assistant'}
                   />
                 </ErrorBoundary>
               </motion.div>
@@ -335,7 +331,6 @@ export default function App() {
             {page === 'settings' && (
               <motion.div key="settings" {...pageVariants}>
                 <ErrorBoundary>
-                  {/* 🗑️ ถอด onOpenQR ออก เพราะหน้า Setting เราเป็น JSON หมดแล้ว */}
                   <SettingsPage
                     settings={settings}
                     onSave={handleSaveSettings}
@@ -354,8 +349,6 @@ export default function App() {
         activeCount={activeCount} deviceCount={devices.length}
       />
       <TweaksPanel open={tweaksOpen} tweaks={tweaks} onChange={patch => setTweaks(t => ({ ...t, ...patch }))} />
-
-      {/* 🗑️ ลบ Component QRShareModal ทิ้งไปเลย สะอาดตา! */}
 
       <AnimatePresence>
         {toast && (
