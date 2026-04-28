@@ -21,45 +21,25 @@ const MQTT_DOT_STYLE = {
 
 export default function SettingsPage({ settings, onSave, mqttStatus = 'offline', onClearAll }) {
   const [s, setS] = useState(settings)
-  const [dirty, setDirty] = useState(false)
-  const [saved, setSaved] = useState(false)
 
-  useEffect(() => { setS(settings); setDirty(false) }, [settings])
+  useEffect(() => { setS(settings) }, [settings])
 
-  const set = (k, v) => { setS(p => ({ ...p, [k]: v })); setDirty(true); setSaved(false) }
-  const setMq = (k, v) => { setS(p => ({ ...p, mqtt: { ...p.mqtt, [k]: v } })); setDirty(true); setSaved(false) }
-  const setPro = (k, v) => { setS(p => ({ ...p, profile: { ...p.profile, [k]: v } })); setDirty(true); setSaved(false) }
+  const save = updater => setS(p => { const u = updater(p); onSave(u); return u })
 
-  const toggleSkill = id => {
-    setS(p => {
-      const updated = { ...p, skills: p.skills.map(sk => sk.id === id ? { ...sk, enabled: !sk.enabled } : sk) }
-      onSave(updated)
-      return updated
-    })
-  }
+  const set    = (k, v)       => save(p => ({ ...p, [k]: v }))
+  const setMq  = (k, v)       => save(p => ({ ...p, mqtt: { ...p.mqtt, [k]: v } }))
+  const setPro = (k, v)       => save(p => ({ ...p, profile: { ...p.profile, [k]: v } }))
 
-  const updateSkill = (id, patch) =>
-    setS(p => ({ ...p, skills: p.skills.map(sk => sk.id === id ? { ...sk, ...patch } : sk) }))
+  const toggleSkill  = id       => save(p => ({ ...p, skills: p.skills.map(sk => sk.id === id ? { ...sk, enabled: !sk.enabled } : sk) }))
+  const updateSkill  = (id, patch) => save(p => ({ ...p, skills: p.skills.map(sk => sk.id === id ? { ...sk, ...patch } : sk) }))
+  const removeSkill  = id       => save(p => ({ ...p, skills: p.skills.filter(sk => sk.id !== id) }))
 
   const addSkill = () => {
     const id = 'skill-' + Date.now().toString(36)
-    setS(p => ({
+    save(p => ({
       ...p,
-      skills: [
-        ...p.skills,
-        { id, name: 'new_tool', description: 'Describe what this tool does.', enabled: true, schema: '{"type":"object","properties":{}}' },
-      ],
+      skills: [...p.skills, { id, name: 'new_tool', description: 'Describe what this tool does.', enabled: true, schema: '{"type":"object","properties":{}}' }],
     }))
-    setDirty(true)
-  }
-
-  const removeSkill = id => setS(p => ({ ...p, skills: p.skills.filter(sk => sk.id !== id) }))
-
-  const handleSave = () => {
-    onSave(s)
-    setDirty(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2500)
   }
 
   const handleClearAll = () => {
@@ -83,31 +63,21 @@ export default function SettingsPage({ settings, onSave, mqttStatus = 'offline',
   }
 
   const importData = async () => {
+    const apply = data => {
+      if (data.settings) { setS(data.settings); onSave(data.settings) }
+      if (data.devices) localStorage.setItem('aiot_devices', JSON.stringify(data.devices))
+      if (data.areas) localStorage.setItem('aiot_areas', JSON.stringify(data.areas))
+      alert('โหลดข้อมูลสำเร็จแล้วฮะ! 🚀')
+    }
     try {
       const text = await navigator.clipboard.readText()
       if (!text) throw new Error('Clipboard ว่างเปล่า')
-
-      const data = JSON.parse(text)
-      if (data.settings) setS(data.settings)
-      if (data.devices) localStorage.setItem('aiot_devices', JSON.stringify(data.devices))
-      if (data.areas) localStorage.setItem('aiot_areas', JSON.stringify(data.areas))
-
-      setDirty(true)
-      alert('โหลดข้อมูลสำเร็จแล้ว! อย่าลืมกด Save n้าฮะ 💾')
-    } catch (err) {
-      // Fallback ถ้าเบราว์เซอร์ไม่ยอมให้ดึงค่าจาก Clipboard อัตโนมัติ
+      apply(JSON.parse(text))
+    } catch {
       const manualText = prompt('เบราว์เซอร์นี้ไม่อนุญาตให้ดึงข้อมูลจาก Clipboard อัตโนมัติฮะ\n\nโปรดวางโค้ด JSON ด้วยตัวเองตรงนี้เลย:')
       if (manualText) {
-        try {
-          const data = JSON.parse(manualText)
-          if (data.settings) setS(data.settings)
-          if (data.devices) localStorage.setItem('aiot_devices', JSON.stringify(data.devices))
-          if (data.areas) localStorage.setItem('aiot_areas', JSON.stringify(data.areas))
-          setDirty(true)
-          alert('โหลดข้อมูลสำเร็จแล้ว! อย่าลืมกด Save น้าฮะ 💾')
-        } catch (e2) {
-          alert('โค้ด JSON ไม่ถูกต้องฮะ ลองเช็คดูอีกทีน้า 🥺')
-        }
+        try { apply(JSON.parse(manualText)) }
+        catch { alert('โค้ด JSON ไม่ถูกต้องฮะ ลองเช็คดูอีกทีน้า 🥺') }
       }
     }
   }
@@ -128,14 +98,6 @@ export default function SettingsPage({ settings, onSave, mqttStatus = 'offline',
             <div className="sh-eyebrow mono">SYSTEM · CONFIGURATION</div>
             <h1>Settings</h1>
             <p className="sh-page-sub">ค่าต่างๆ ถูกบันทึกใน localStorage ของเบราว์เซอร์</p>
-          </div>
-          <div className="sh-settings-actions">
-            <button className="sh-btn-ghost" onClick={() => { setS(settings); setDirty(false) }} disabled={!dirty}>
-              Discard
-            </button>
-            <button className="sh-btn-primary" onClick={handleSave} disabled={!dirty}>
-              {saved ? <><Icon name="check" size={14} /> Saved</> : dirty ? 'Save configuration' : 'Saved'}
-            </button>
           </div>
         </div>
 
