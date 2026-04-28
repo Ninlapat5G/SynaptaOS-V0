@@ -134,12 +134,12 @@ ${JSON.stringify(deviceList, null, 2)}`
   try {
     data = await llm.chat(
       [{ role: 'system', content: systemPrompt }, ...apiHistory, { role: 'user', content: text }],
-      { tools: tools.length ? tools : undefined, tool_choice: 'auto', temperature: 0.1, max_tokens: 4096 },
+      { ...(tools.length ? { tools, tool_choice: 'auto' } : {}), temperature: 0.1, max_tokens: 4096 },
       signal
     )
   } catch (err) {
     if (err.name === 'AbortError') throw err
-    throw new Error('Router returned no response from API')
+    throw new Error(`Router: ${err.message}`)
   }
 
   const msg = data?.choices?.[0]?.message
@@ -214,12 +214,12 @@ ${JSON.stringify(deviceList, null, 2)}`
   try {
     data = await llm.chat(
       [{ role: 'system', content: systemPrompt }, ...apiHistory, { role: 'user', content: text }],
-      { tools: tools.length ? tools : undefined, tool_choice: 'auto', temperature: 0.1, max_tokens: 1024 },
+      { ...(tools.length ? { tools, tool_choice: 'auto' } : {}), temperature: 0.1, max_tokens: 1024 },
       signal
     )
   } catch (err) {
     if (err.name === 'AbortError') throw err
-    throw new Error('Planner returned no response from API')
+    throw new Error(`Planner: ${err.message}`)
   }
 
   const msg = data?.choices?.[0]?.message
