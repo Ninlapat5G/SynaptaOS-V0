@@ -237,7 +237,7 @@ async function responderNode(state) {
     ? allToolResults.map(t => `Tool ${t.name}: ${JSON.stringify(t.result)}`).join('\n')
     : 'None — no tools were called'
 
-  const stateSummary = allToolResults.length
+  const stateSummary = allToolResults.length === 0
     ? (deviceList || [])
       .map(d => `- [${d.room}] ${d.name} (${d.type}): ${d.type === 'digital' ? (d.on ? 'ON' : 'OFF') : d.value}`)
       .join('\n') || 'No devices registered'
