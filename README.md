@@ -181,7 +181,7 @@ npm run build    # production build
 
 - รัน tool calls **พร้อมกันทั้งหมด** (Promise.all)
 - UI แสดง ToolPill แต่ละตัวพร้อม label `R1` / `R2` บอก round
-- **web_search** มี synthesizer sub-agent: ดึงข้อมูลจาก Serper → LLM สรุปเฉพาะส่วนที่เกี่ยวข้อง → ส่ง summary สะอาดต่อไป แทนที่จะส่ง raw JSON
+- **web_search** ดึงข้อมูลจาก Serper แล้วแปลงเป็น plain text ทันที (answerBox + knowledgeGraph + organic snippets) — ส่งเนื้อหาครบถ้วนต่อให้ responder โดยไม่ผ่าน LLM summarizer เพื่อไม่ให้สาระสำคัญหาย
 
 ### Planner Node — Completion Checker (R2)
 

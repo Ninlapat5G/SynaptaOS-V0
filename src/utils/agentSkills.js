@@ -3,6 +3,8 @@
 // ctx = { mqttClient, sensorCache, settings, mqttWaitForMessage,
 //          devicesRef, baseTopicRef, setDevices,
 //          normalizeBase, buildFullTopic, generateOsCommand }
+// Note: synthesizeSearch has been removed — web_search now formats results
+//       directly as plain text and passes everything to the responder LLM.
 //
 // To add a new skill:
 //   1. Add a handler function below
@@ -91,7 +93,7 @@ async function osCommand(args, ctx) {
 }
 
 async function webSearch(args, ctx) {
-  const { settings, synthesizeSearch } = ctx
+  const { settings } = ctx
   const { query } = args
 
   if (!query) return { success: false, error: 'No search query provided' }
@@ -116,25 +118,24 @@ async function webSearch(args, ctx) {
 
   const data = await res.json()
 
-  // Extract answerBox / knowledgeGraph (direct answers)
-  const direct = []
-  if (data.answerBox?.answer)   direct.push({ type: 'answer',    content: data.answerBox.answer })
-  else if (data.answerBox?.snippet) direct.push({ type: 'answer', content: data.answerBox.snippet })
+  // Format results as plain text — keep all content, strip JSON structure
+  // Responder LLM receives everything and picks out what's relevant itself
+  const parts = []
+
+  if (data.answerBox?.answer)
+    parts.push(data.answerBox.answer)
+  else if (data.answerBox?.snippet)
+    parts.push(data.answerBox.snippet)
+
   if (data.knowledgeGraph?.description)
-    direct.push({ type: 'knowledge', title: data.knowledgeGraph.title, content: data.knowledgeGraph.description })
+    parts.push(`${data.knowledgeGraph.title}: ${data.knowledgeGraph.description}`)
 
-  // Top organic results
-  const organic = (data.organic || []).slice(0, 5).map(r => ({
-    title:   r.title,
-    snippet: r.snippet,
-    url:     r.link,
-  }))
+  const organic = (data.organic || []).slice(0, 5)
+  if (organic.length)
+    parts.push(organic.map(r => `${r.title}\n${r.snippet}\n${r.link}`).join('\n\n'))
 
-  const raw = { direct, organic }
-  const summary = synthesizeSearch ? await synthesizeSearch({ settings, query, results: raw }) : null
-  return summary
-    ? { success: true, query, summary }
-    : { success: true, query, direct, organic }
+  const summary = parts.join('\n\n') || 'No results found'
+  return { success: true, query, summary }
 }
 
 // ── Registry ───────────────────────────────────────────────────────────────────

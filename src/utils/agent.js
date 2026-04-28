@@ -346,29 +346,6 @@ export const runAgent = params => agentGraph.run({
 
 // ── Sub-agents ────────────────────────────────────────────────────────────────
 
-export async function synthesizeSearch({ settings, query, results, signal }) {
-  const llm = createLLMClient(settings)
-  const context = [
-    ...(results.direct || []).map(d => d.content),
-    ...(results.organic || []).map(r => `${r.title}: ${r.snippet}`),
-  ].filter(Boolean).join('\n\n')
-
-  let data
-  try {
-    data = await llm.chat(
-      [
-        { role: 'system', content: `You are a research synthesizer. Current date: ${nowString()}. Extract and summarize only what directly answers the query. Be concise — 3-5 sentences max. If results are outdated or irrelevant, say so.` },
-        { role: 'user', content: `Query: ${query}\n\nSearch results:\n${context}` },
-      ],
-      { temperature: 0.3, max_tokens: 512 },
-      signal
-    )
-  } catch {
-    return null
-  }
-  return data?.choices?.[0]?.message?.content?.trim() || null
-}
-
 const OS_COMMAND_SYSTEM = `You are a terminal command translator for remote machine control via MQTT.
 Convert the user's instruction into the exact terminal command for the target OS.
 
