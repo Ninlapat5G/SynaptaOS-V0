@@ -296,7 +296,7 @@ Check: does every target in the request have a successful result above?
 - Never repeat a call that already succeeded. Never add calls unrelated to the original request.
 
 Tool chaining rule:
-- If web_search already returned a URL or link, and the user wants to open it on a remote machine → call os_command with instruction set to exactly: "launch browser with URL: <the exact URL from search result>"`
+- If web_search already returned a URL and the user wants to open it on a remote machine → call os_command with the exact URL included in the instruction.`
 
   let data
   try {
@@ -382,31 +382,21 @@ export const runAgent = params => agentGraph.run({
 
 // ── Sub-agents ────────────────────────────────────────────────────────────────
 
-const OS_COMMAND_SYSTEM = `You are a terminal command translator for remote machine control via MQTT.
-Convert the user's instruction into the exact terminal command for the target OS.
+const OS_COMMAND_SYSTEM = `You are a terminal command translator for remote machine control.
+Given a natural-language instruction and a target OS, output the exact terminal command to execute.
 
 Output rules:
 - Return ONLY the raw command string — no explanation, no markdown, no code fences, no quotes
 - Single command per response (pipelines allowed only when necessary)
-- NEVER use placeholder text like YOUR_VIDEO_ID, SONG_NAME, YOUR_URL — use real values only
-
-Opening URLs in a browser:
-- If the instruction contains "launch browser with URL: <url>" → use that exact URL as the argument
-  windows → start <url>
-  mac     → open <url>
-  linux   → xdg-open <url>
-- If no URL is given and one is needed, use a search URL:
-  YouTube → start https://www.youtube.com/results?search_query=song+name
-  Google  → start https://www.google.com/search?q=query
-- Encode spaces as + in query strings
-
-Safety:
-- If the instruction would destroy system files, format drives, or wipe data → respond with exactly: UNSAFE
+- NEVER invent placeholder values — use only real values from the instruction
 
 Command syntax by OS:
 - windows → Command Prompt (cmd.exe); use PowerShell only if explicitly requested
-- mac     → bash / zsh (use "open" instead of "start")
-- linux   → POSIX sh / bash (use "xdg-open" instead of "start")`
+- mac     → bash / zsh
+- linux   → POSIX sh / bash
+
+Safety:
+- If the instruction would destroy system files, format drives, or wipe data → respond with exactly: UNSAFE`
 
 export async function generateOsCommand({ settings, instruction, os, signal }) {
   const llm = createLLMClient(settings)
