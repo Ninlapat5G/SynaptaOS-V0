@@ -296,7 +296,7 @@ Check: does every target in the request have a successful result above?
 - Never repeat a call that already succeeded. Never add calls unrelated to the original request.
 
 Tool chaining rule:
-- If web_search already returned a URL or link, and the user wants to open it on a remote machine → call os_command now with the real URL from the search result as part of the instruction.`
+- If web_search already returned a URL or link, and the user wants to open it on a remote machine → call os_command with instruction set to exactly: "launch browser with URL: <the exact URL from search result>"`
 
   let data
   try {
@@ -390,11 +390,14 @@ Output rules:
 - Single command per response (pipelines allowed only when necessary)
 - NEVER use placeholder text like YOUR_VIDEO_ID, SONG_NAME, YOUR_URL — use real values only
 
-Opening media / URLs (when you don't have the exact URL):
-- Use search URLs instead of direct links, e.g.:
-  YouTube search  → start https://www.youtube.com/results?search_query=song+name
-  Spotify search  → start https://open.spotify.com/search/song+name
-  Google search   → start https://www.google.com/search?q=query
+Opening URLs in a browser:
+- If the instruction contains "launch browser with URL: <url>" → use that exact URL as the argument
+  windows → start <url>
+  mac     → open <url>
+  linux   → xdg-open <url>
+- If no URL is given and one is needed, use a search URL:
+  YouTube → start https://www.youtube.com/results?search_query=song+name
+  Google  → start https://www.google.com/search?q=query
 - Encode spaces as + in query strings
 
 Safety:
