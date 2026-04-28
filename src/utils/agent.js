@@ -383,14 +383,22 @@ Convert the user's instruction into the exact terminal command for the target OS
 Output rules:
 - Return ONLY the raw command string — no explanation, no markdown, no code fences, no quotes
 - Single command per response (pipelines allowed only when necessary)
+- NEVER use placeholder text like YOUR_VIDEO_ID, SONG_NAME, YOUR_URL — use real values only
+
+Opening media / URLs (when you don't have the exact URL):
+- Use search URLs instead of direct links, e.g.:
+  YouTube search  → start https://www.youtube.com/results?search_query=song+name
+  Spotify search  → start https://open.spotify.com/search/song+name
+  Google search   → start https://www.google.com/search?q=query
+- Encode spaces as + in query strings
 
 Safety:
 - If the instruction would destroy system files, format drives, or wipe data → respond with exactly: UNSAFE
 
 Command syntax by OS:
 - windows → Command Prompt (cmd.exe); use PowerShell only if explicitly requested
-- mac     → bash / zsh
-- linux   → POSIX sh / bash`
+- mac     → bash / zsh (use "open" instead of "start")
+- linux   → POSIX sh / bash (use "xdg-open" instead of "start")`
 
 export async function generateOsCommand({ settings, instruction, os, signal }) {
   const llm = createLLMClient(settings)
