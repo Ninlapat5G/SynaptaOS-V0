@@ -159,7 +159,8 @@ npm run build    # production build
 
 ### Router Node — ตัดสินใจ
 
-- ได้รับ device list ทั้งหมด (JSON) + skills ที่เปิดใช้งาน
+- ได้รับ device list ทั้งหมด (JSON) + skills ที่เปิดใช้งาน + **ประวัติสนทนา 5 รอบล่าสุด**
+- ใช้ประวัติสนทนาเพื่อ resolve การอ้างอิงข้ามรอบ เช่น "ปิดมันด้วย" หรือ "ลดลงอีกนิด"
 - `temperature=0.1` เพื่อความแม่นยำ
 - คืน `tool_calls[]` เท่านั้น — ไม่มีคำพูดภาษาคน
 
@@ -171,7 +172,8 @@ npm run build    # production build
 
 ### Planner Node — ตัดสินใจ Round 2
 
-- รับ history ครบ: tool ที่รันไป + args + result ทุกตัว
+- รับ history ครบ: tool ที่รันไป + args + result ทุกตัว + **ประวัติสนทนา 5 รอบล่าสุด**
+- ใช้ประวัติสนทนาเพื่อเข้าใจ intent แบบ multi-turn เช่น "ทำแบบเดิมกับห้องนั่งเล่นด้วย"
 - ข้าม planner อัตโนมัติถ้า round 1 มีแค่ mqtt_publish ล้วนๆ (ไม่มีข้อมูลใหม่ให้คิด)
 - **Strict Guardrail:** `web_search` และ `mqtt_publish` จะถูกยึดคืน (filter ออกจาก tool list ทันที) หากเคยถูกเรียกไปแล้วในรอบก่อนหน้า เพื่อป้องกันโมเดลขนาดเล็ก (SLM) เกิดอาการหลอน สั่งงานซ้ำซ้อน หรือไปรบกวนอุปกรณ์อื่นที่ผู้ใช้ไม่ได้สั่ง
 - ตัดสินใจได้ 2 แบบ: เรียก device tool เพิ่มเติมต่อจากผล search/sensor หรือคืนค่า DONE เพื่อจบงาน
@@ -192,6 +194,8 @@ npm run build    # production build
 | `mqtt_read` | อ่านค่าล่าสุดจาก sensor topic | MQTT |
 | `os_command` | แปลภาษาคนเป็น terminal command แล้วส่งไปยัง os_terminal device | MQTT |
 | `web_search` | ค้นหาข้อมูลจากอินเทอร์เน็ตผ่าน Serper API | Serper API Key |
+
+เปิด/ปิด skill ได้ที่ Settings → Section 03 — skill ที่ปิดจะถูกบล็อกทั้งจาก tool list ที่ LLM เห็น และที่ชั้น execution ดังนั้น tool ที่ disabled จะไม่ทำงานได้แม้ในกรณี prompt injection
 
 เพิ่ม custom skill ได้ที่ Settings → Section 03 — กำหนด name, description, JSON Schema ได้อิสระ
 
