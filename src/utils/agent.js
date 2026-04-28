@@ -125,7 +125,7 @@ Dispatch rules:
 2. Digital payload: exactly "true" or "false".
 3. Analog payload: number string from "0" to the device's max value (see "max" field, default 255, may be 1023).
 4. os_command: set instruction = user's exact request, os = device's "os" field, topic = device's pubTopic. Only call when an os_terminal device exists. Set wait_output: true only for commands that produce output (dir, ls, cat, pwd, ipconfig, etc.) — false for fire-and-forget (shutdown, reboot, open app, kill process, etc.).
-5. web_search: use when the user asks for real-world information outside the device context (news, weather, prices, facts, definitions). Write a precise English query unless Thai sources are explicitly requested.
+5. web_search: ONLY when the user explicitly asks to search, look up, or requests specific external information (news, weather, prices, facts). Do NOT use for greetings, small talk, opinions, or anything answerable from conversation context.
 
 Available devices:
 ${JSON.stringify(deviceList, null, 2)}`
