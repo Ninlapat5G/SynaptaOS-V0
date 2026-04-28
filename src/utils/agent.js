@@ -116,7 +116,7 @@ function summarizeResults(allToolResults, deviceList) {
           : `${icon} web_search failed: ${r.result.error}`
       case 'os_command':
         return ok
-          ? `${icon} os_command → ${r.result.output ?? 'executed'}`
+          ? `${icon} os_command → ${r.result.summary ?? 'executed'}`
           : `${icon} os_command failed: ${r.result.error}`
       default:
         return `${icon} ${r.name}: ${ok ? 'success' : r.result.error}`
@@ -126,10 +126,42 @@ function summarizeResults(allToolResults, deviceList) {
 
 function summarizeDevices(deviceList) {
   return (deviceList || [])
-    .map(d => d.type === 'analog'
-      ? `${d.name} (${d.room}) — analog, max ${d.max ?? 255}, pubTopic: ${d.pubTopic}`
-      : `${d.name} (${d.room}) — digital, pubTopic: ${d.pubTopic}`)
+    .map(d => {
+      if (d.type === 'analog')
+        return `${d.name} (${d.room}) — analog, max ${d.max ?? 255}, pubTopic: ${d.pubTopic}`
+      if (d.type === 'os_terminal')
+        return `${d.name} (${d.room}) — os_terminal (${d.os ?? 'unknown OS'}), pubTopic: ${d.pubTopic}`
+      return `${d.name} (${d.room}) — digital, pubTopic: ${d.pubTopic}`
+    })
     .join('\n') || 'No devices registered'
+}
+
+// ── Responder Tool Context Formatter ─────────────────────────────────────────
+// Plain-text version of tool results for the responder.
+// Unlike summarizeResults (terse, for planner), this preserves full content.
+
+function formatResultsForResponder(allToolResults) {
+  return allToolResults.map(t => {
+    const ok = t.result?.error === undefined
+    if (!ok) return `[${t.name}] Error: ${t.result.error}`
+
+    switch (t.name) {
+      case 'mqtt_publish':
+        return `[${t.name}] Set ${t.args?.topic} = ${t.args?.payload}`
+      case 'mqtt_read':
+        return `[${t.name}] ${t.args?.topic} = ${t.result.value ?? 'no data'}`
+      case 'web_search':
+        return `[${t.name}] Query: ${t.args?.query}\n${t.result.summary}`
+      case 'os_command':
+        return t.result.summary
+          ? `[${t.name}]\n${t.result.summary}`
+          : `[${t.name}] Command executed (no output)`
+      default:
+        return t.result.summary
+          ? `[${t.name}] ${t.result.summary}`
+          : `[${t.name}] success`
+    }
+  }).join('\n\n')
 }
 
 // ── Planner Guard ──────────────────────────────────────────────────────────────
@@ -138,11 +170,9 @@ function summarizeDevices(deviceList) {
 
 function shouldRunPlanner(toolResults) {
   return toolResults.some(r => {
-    if (r.result?.error !== undefined) return true  // any failure → planner may recover
-    if (r.result?.value !== undefined) return true  // mqtt_read returned sensor data
-    if (r.result?.organic !== undefined) return true  // web_search (legacy)
-    if (r.result?.summary !== undefined) return true  // web_search (synthesized)
-    if (r.result?.output !== undefined) return true  // os_command returned output
+    if (r.result?.error !== undefined) return true   // any failure → planner may recover
+    if (r.result?.value !== undefined) return true   // mqtt_read returned sensor data
+    if (r.result?.summary !== undefined) return true // web_search / os_command with output
     return false
     // mqtt_publish success: { success, topic, payload } — nothing to reason about
   })
@@ -179,6 +209,7 @@ mqtt_read — call only when the user is asking for the current value of a senso
   Do NOT call if the user is not asking for a live reading.
 
 os_command — call when the user wants to run a command on a remote machine AND an os_terminal device exists.
+  Use the OS shown in the device list (e.g. "os_terminal (windows)") as the "os" argument — do NOT guess.
   wait_output: true for commands that return output (ls, dir, cat). false for fire-and-forget (shutdown, open app).
 
 web_search — call when the user explicitly needs current external information that cannot be answered from context.
@@ -283,7 +314,7 @@ async function responderNode(state) {
   const llm = createLLMClient(settings)
 
   const toolContext = allToolResults.length
-    ? allToolResults.map(t => `Tool ${t.name}: ${JSON.stringify(t.result)}`).join('\n')
+    ? formatResultsForResponder(allToolResults)
     : 'None — no tools were called'
 
   const stateSummary = allToolResults.length === 0

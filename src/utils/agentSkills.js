@@ -89,7 +89,9 @@ async function osCommand(args, ctx) {
   }
 
   const output = outputTopic ? await mqttWaitForMessage(outputTopic, 10000) : null
-  return { success: true, topic: fullTopic, command, os, ...(output != null && { output }) }
+  // Return plain text so responder doesn't see raw JSON fields
+  if (output != null) return { success: true, summary: `Ran: ${command}\n\n${output}` }
+  return { success: true }
 }
 
 async function webSearch(args, ctx) {
