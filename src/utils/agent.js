@@ -147,6 +147,15 @@ function shouldRunPlanner(toolResults) {
   })
 }
 
+// ── Time Helper ───────────────────────────────────────────────────────────────
+
+function nowString() {
+  return new Date().toLocaleString('en-GB', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+    hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
+  })
+}
+
 // ── Agent Nodes ────────────────────────────────────────────────────────────────
 
 async function routerNode(state) {
@@ -155,6 +164,7 @@ async function routerNode(state) {
   const tools = buildTools(settings)
 
   const systemPrompt = `You are a smart home tool dispatcher. Output tool calls only — no text, no explanation.
+Current date & time: ${nowString()}
 
 Return EMPTY (no tool calls) when the message is pure conversation: greetings, farewells, thanks, acknowledgements, questions about you as an AI, or opinions unrelated to any device.
 
@@ -288,6 +298,7 @@ async function responderNode(state) {
     : null
 
   const systemPrompt = `${settings.systemPrompt}
+(Current date & time: ${nowString()} — use this when relevant, do not announce it unprompted.)
 
 [User Info]
 Name: "${settings.profile?.name || 'User'}"${stateSummary ? `
@@ -295,7 +306,7 @@ Name: "${settings.profile?.name || 'User'}"${stateSummary ? `
 [Current Home Status]
 ${stateSummary}` : ''}
 
-[Tool Execution Results]
+[Tool Results]
 ${toolContext}`
 
   let reply = ''
@@ -366,7 +377,7 @@ export async function synthesizeSearch({ settings, query, results, signal }) {
   try {
     data = await llm.chat(
       [
-        { role: 'system', content: 'You are a research synthesizer. Extract and summarize only what directly answers the query. Be concise — 3-5 sentences max. If results are irrelevant, say so.' },
+        { role: 'system', content: `You are a research synthesizer. Current date: ${nowString()}. Extract and summarize only what directly answers the query. Be concise — 3-5 sentences max. If results are outdated or irrelevant, say so.` },
         { role: 'user', content: `Query: ${query}\n\nSearch results:\n${context}` },
       ],
       { temperature: 0.3, max_tokens: 512 },
