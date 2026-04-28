@@ -111,7 +111,9 @@ function summarizeResults(allToolResults, deviceList) {
           ? `${icon} mqtt_read → ${label} = ${r.result.value}`
           : `${icon} mqtt_read → ${label} failed: ${r.result.error}`
       case 'web_search':
-        return ok ? `${icon} web_search → got results` : `${icon} web_search failed: ${r.result.error}`
+        return ok
+          ? `${icon} web_search → ${r.result.summary ?? 'got results'}`
+          : `${icon} web_search failed: ${r.result.error}`
       case 'os_command':
         return ok
           ? `${icon} os_command → ${r.result.output ?? 'executed'}`
@@ -352,6 +354,29 @@ Command syntax by OS:
 - windows → Command Prompt (cmd.exe); use PowerShell only if explicitly requested
 - mac     → bash / zsh
 - linux   → POSIX sh / bash`
+
+export async function synthesizeSearch({ settings, query, results, signal }) {
+  const llm = createLLMClient(settings)
+  const context = [
+    ...(results.direct || []).map(d => d.content),
+    ...(results.organic || []).map(r => `${r.title}: ${r.snippet}`),
+  ].filter(Boolean).join('\n\n')
+
+  let data
+  try {
+    data = await llm.chat(
+      [
+        { role: 'system', content: 'You are a research synthesizer. Extract and summarize only what directly answers the query. Be concise — 3-5 sentences max. If results are irrelevant, say so.' },
+        { role: 'user', content: `Query: ${query}\n\nSearch results:\n${context}` },
+      ],
+      { temperature: 0.3, max_tokens: 512 },
+      signal
+    )
+  } catch {
+    return null
+  }
+  return data?.choices?.[0]?.message?.content?.trim() || null
+}
 
 export async function generateOsCommand({ settings, instruction, os, signal }) {
   const llm = createLLMClient(settings)

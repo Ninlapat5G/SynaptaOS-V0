@@ -91,7 +91,7 @@ async function osCommand(args, ctx) {
 }
 
 async function webSearch(args, ctx) {
-  const { settings } = ctx
+  const { settings, synthesizeSearch } = ctx
   const { query } = args
 
   if (!query) return { success: false, error: 'No search query provided' }
@@ -130,7 +130,11 @@ async function webSearch(args, ctx) {
     url:     r.link,
   }))
 
-  return { success: true, query, direct, organic }
+  const raw = { direct, organic }
+  const summary = synthesizeSearch ? await synthesizeSearch({ settings, query, results: raw }) : null
+  return summary
+    ? { success: true, query, summary }
+    : { success: true, query, direct, organic }
 }
 
 // ── Registry ───────────────────────────────────────────────────────────────────
