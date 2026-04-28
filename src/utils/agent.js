@@ -296,7 +296,10 @@ Check: does every target in the request have a successful result above?
 - Never repeat a call that already succeeded. Never add calls unrelated to the original request.
 
 Tool chaining rule:
-- If web_search already returned a URL and the user wants to open it on a remote machine → call os_command with the exact URL included in the instruction.`
+- If web_search already returned results and the user wants to open a URL on a remote machine:
+  Extract the most relevant URL from the search result and include it verbatim in the instruction.
+  Example instruction: "open this URL in the browser: https://www.youtube.com/watch?v=xxxxx"
+  Do NOT write a vague instruction like "open the song" — the URL must be in the instruction.`
 
   let data
   try {
@@ -389,6 +392,10 @@ Output rules:
 - Return ONLY the raw command string — no explanation, no markdown, no code fences, no quotes
 - Single command per response (pipelines allowed only when necessary)
 - NEVER invent placeholder values — use only real values from the instruction
+- If asked to open a video/song but no URL is in the instruction → use a YouTube search URL instead:
+  windows: start https://www.youtube.com/results?search_query=song+name
+  mac:     open  https://www.youtube.com/results?search_query=song+name
+  linux:   xdg-open https://www.youtube.com/results?search_query=song+name
 
 Command syntax by OS:
 - windows → Command Prompt (cmd.exe); use PowerShell only if explicitly requested
