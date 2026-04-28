@@ -111,7 +111,7 @@ function summarizeResults(allToolResults, deviceList) {
           : `${icon} mqtt_read → ${label} failed: ${r.result.error}`
       case 'web_search':
         return ok
-          ? `${icon} web_search → ${r.result.summary ?? 'got results'}`
+          ? `${icon} web_search [query: "${r.args?.query}"] → ${r.result.summary ?? 'got results'}`
           : `${icon} web_search failed: ${r.result.error}`
       case 'os_command':
         return ok
@@ -120,7 +120,7 @@ function summarizeResults(allToolResults, deviceList) {
       default:
         return `${icon} ${r.name}: ${ok ? 'success' : r.result.error}`
     }
-  }).join('\n')
+  }).join('\n\n---\n\n')
 }
 
 function summarizeDevices(deviceList) {
@@ -238,7 +238,7 @@ ${summarizeDevices(deviceList)}`
 }
 
 async function toolExecutorNode(state) {
-  const { toolCalls, executeTool, onToolCall, onToolResult } = state
+  const { toolCalls, executeTool, onToolCall, onToolResult, settings, apiHistory = [], signal } = state
   const round = (state.toolRound || 0) + 1   // 1-indexed label for UI
 
   // Run all tool calls in parallel — independent tools don't need to wait for each other
@@ -247,6 +247,11 @@ async function toolExecutorNode(state) {
       const name = tc.function.name
       let args = {}
       try { args = JSON.parse(tc.function.arguments || '{}') } catch { args = tc.function.arguments }
+
+      // ✨ [NEW] Intercept web_search to refine the query using conversation history
+      if (name === 'web_search' && args.query) {
+        args.query = await generateSearchQuery({ settings, query: args.query, apiHistory, signal })
+      }
 
       onToolCall?.(name, args, round)
 
@@ -291,11 +296,11 @@ Check: does every target in the user's intent have a successful result above?
 - All targets done → return empty (no tool calls).
 - A target is missing → call the tool for that specific target only.
 - A call failed → retry once with corrected arguments if fixable.
-- Never repeat a call that already succeeded. Never add calls unrelated to the original request.
+- STRICT RULE: NEVER repeat a tool call with the same arguments. If web_search already succeeded for a query, DO NOT search for it again.
 
 Tool chaining rule:
 - If web_search already returned results and the user wants to open a URL on a remote machine:
-  Extract the most relevant URL from the search result and include it verbatim in the instruction.
+  Extract the most relevant URL from the search result and call "os_command" IMMEDIATELY.
   Example instruction: "open this URL in the browser: https://www.youtube.com/watch?v=xxxxx"
   Do NOT write a vague instruction like "open the song" — the URL must be in the instruction.`
 
@@ -423,4 +428,36 @@ export async function generateOsCommand({ settings, instruction, os, signal }) {
   if (!cmd) throw new Error('ไม่สามารถสร้างคำสั่งได้')
   if (cmd === 'UNSAFE') throw new Error('คำสั่งนี้ไม่ปลอดภัย — ปฏิเสธการรัน')
   return cmd
+}
+
+const SEARCH_QUERY_SYSTEM = `You are a Search Context Optimizer.
+Your task is to analyze the conversation history and the user's intended search query to generate the most precise Google search keyword.
+
+Rules:
+- Output ONLY the raw search query string. No explanation, no quotes.
+- Resolve pronouns (e.g., "หาข้อมูลเรื่องนั้นต่อ", "ขอเพลงที่คุยกันเมื่อกี้") by looking at the history.
+- Extract only the essential keywords needed for a good search engine result.
+- If the original query is already perfect and clear, output it exactly as is.`
+
+export async function generateSearchQuery({ settings, query, apiHistory, signal }) {
+  const llm = createLLMClient(settings)
+  // ดึงประวัติแค่ 4 ข้อความล่าสุดมาประกอบบริบท เพื่อไม่ให้รกเกินไป
+  const recentHistory = (apiHistory || []).slice(-4)
+
+  try {
+    const data = await llm.chat(
+      [
+        { role: 'system', content: SEARCH_QUERY_SYSTEM },
+        ...recentHistory,
+        { role: 'user', content: `Router intended query: "${query}"\nPlease output the optimized search query:` },
+      ],
+      { temperature: 0.1, max_tokens: 128 },
+      signal
+    )
+    const optimized = data?.choices?.[0]?.message?.content?.trim()
+    return optimized || query
+  } catch (err) {
+    console.warn('[Agent] Search query optimization failed, falling back to original:', err)
+    return query
+  }
 }
