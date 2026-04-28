@@ -31,9 +31,11 @@ export default function SettingsPage({ settings, onSave, mqttStatus = 'offline',
   const setPro = (k, v) => { setS(p => ({ ...p, profile: { ...p.profile, [k]: v } })); setDirty(true); setSaved(false) }
 
   const toggleSkill = id => {
-    setS(p => ({ ...p, skills: p.skills.map(sk => sk.id === id ? { ...sk, enabled: !sk.enabled } : sk) }))
-    setDirty(true)
-    setSaved(false)
+    setS(p => {
+      const updated = { ...p, skills: p.skills.map(sk => sk.id === id ? { ...sk, enabled: !sk.enabled } : sk) }
+      onSave(updated)
+      return updated
+    })
   }
 
   const updateSkill = (id, patch) =>
