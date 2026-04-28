@@ -6,7 +6,7 @@ import ToolPill from './chat/ToolPill'
 
 export default function ChatPage({
   messages, onSend, onStop, thinking, executing, onClear, modelName, skillCount, msgCount,
-  draft, onDraftChange: setDraft,
+  draft, onDraftChange: setDraft, assistantName = 'Assistant',
 }) {
   const [isListening, setIsListening] = useState(false)
   const scrollRef = useRef(null)
@@ -70,7 +70,7 @@ export default function ChatPage({
           <div className="sh-side-title">
             <div className="sh-side-dot" />
             <div>
-              <div className="sh-side-h1">Assistant</div>
+              <div className="sh-side-h1">{assistantName}</div>
               <div className="sh-side-h2 mono">{modelName || 'typhoon-v2'} · {msgCount} msgs</div>
             </div>
           </div>

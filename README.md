@@ -19,28 +19,32 @@
 ผู้ใช้พิมพ์/พูด
        │
        ▼
-┌─────────────────────────────────┐
-│       Mini Agent Graph          │
-│                                 │
-│  [router]  temp=0.1             │
-│   วิเคราะห์คำสั่ง → เลือก tool  │
-│       │                         │
-│       ├─ มี tool calls          │
-│       │        ▼                │
-│  [tool_executor]                │
-│   รัน skill ตาม tool calls      │
-│       │                         │
-│       └──────────────┐          │
-│                      ▼          │
-│  [planner]  temp=0.1            │
-│   วิเคราะห์ผลลัพธ์รอบแรก        │
-│   (ลบ tool ที่ใช้แล้วทิ้งกันหลอน)  │
-│       │                         │
-│       └──────────────┐          │
-│                      ▼          │
-│  [responder]  temp=0.7          │
-│   ตอบเป็นภาษาคน  streaming     │
-└─────────────────────────────────┘
+┌──────────────────────────────────────────┐
+│            Mini Agent Graph              │
+│                                          │
+│  [router]  temp=0.1                      │
+│   รู้เวลาปัจจุบัน · เลือก tool           │
+│   รองรับคำสั่งตรงและอ้อมค้อม            │
+│       │                  │               │
+│  มี tool calls       ไม่มี tool calls    │
+│       ▼                  ▼               │
+│  [tool_executor]    [responder]          │
+│   รันพร้อมกัน (parallel)                │
+│       │                                  │
+│   web_search? → [synthesizer]            │
+│   ดึงข้อมูล → สรุปก่อนส่งต่อ            │
+│       │                                  │
+│   shouldRunPlanner?                      │
+│   (ข้ามถ้า mqtt_publish ล้วนๆ)           │
+│       ▼                                  │
+│  [planner]  temp=0.1                     │
+│   completion checker — ครบมั้ย?          │
+│   อ่าน summary ไม่ใช่ raw JSON           │
+│       │                                  │
+│       ▼                                  │
+│  [responder]  temp=0.7                   │
+│   รู้เวลาปัจจุบัน · streaming            │
+└──────────────────────────────────────────┘
        │
        ▼
 Device Cards อัปเดต real-time (MQTT QoS 2)
@@ -55,8 +59,9 @@ Device Cards อัปเดต real-time (MQTT QoS 2)
 | UI Framework | React 18 + Vite 5 |
 | Styling | Tailwind CSS v3 + CSS custom properties (`oklch`) |
 | Animation | Framer Motion (spring, stagger, AnimatePresence, useMotionValue) |
+| Markdown | `react-markdown` — AI responses render bold, lists, code blocks, clickable links |
 | IoT Protocol | MQTT over WebSocket — `mqtt.js` v5 · **QoS 2** · auto-reconnect |
-| AI / LLM | OpenAI-compatible API (ค่าเริ่มต้น: Typhoon 2.5 · 30B MoE · รองรับ tool calling) |
+| AI / LLM | OpenAI-compatible API · รองรับ Typhoon, OpenAI, OpenRouter, Ollama และทุก provider ที่ใช้ `/chat/completions` |
 | Agent | Mini graph engine — router → tool_executor → planner → responder |
 | Voice | Web Speech API (Chrome/Edge) |
 | Storage | `localStorage` — ไม่มี backend |
@@ -109,8 +114,16 @@ npm run build    # production build
 
 1. เปิดแอป → ไปที่หน้า **Settings**
 2. กรอก **API Endpoint**, **API Key**, **Model**
-3. กด **Save configuration**
-4. ไปที่หน้า **AI Chat** แล้วลองพิมพ์ เช่น _"เปิดไฟห้องนั่งเล่น"_
+3. ไปที่หน้า **AI Chat** แล้วลองพิมพ์ เช่น _"เปิดไฟห้องนั่งเล่น"_
+
+**ตัวอย่าง provider ที่ใช้ได้:**
+
+| Provider | Endpoint | หมายเหตุ |
+|---|---|---|
+| Typhoon AI | `https://api.opentyphoon.ai/v1` | ค่าเริ่มต้น · เก่งภาษาไทย |
+| OpenRouter | `https://openrouter.ai/api/v1` | รวม model หลายร้อยตัว |
+| OpenAI | `https://api.openai.com/v1` | — |
+| Ollama (local) | `http://localhost:11434/v1` | ไม่ต้องใช้ internet |
 
 ---
 
@@ -145,7 +158,7 @@ npm run build    # production build
 
 | Section | รายละเอียด |
 |---|---|
-| 01 Profile | ชื่อที่ AI ใช้เรียกในบทสนทนา |
+| 01 Profile | Display Name (ชื่อที่ AI เรียก) · Assistant Name (ชื่อที่แสดงใน Chat UI) |
 | 02 Language Model | Endpoint · API Key · Model · System Prompt |
 | 03 Skills | เปิด/ปิด tool หรือเพิ่ม custom tool พร้อม JSON Schema |
 | 04 Integrations | Serper API Key สำหรับ web_search skill |
@@ -159,30 +172,31 @@ npm run build    # production build
 
 ### Router Node — ตัดสินใจ
 
-- ได้รับ device list ทั้งหมด (JSON) + skills ที่เปิดใช้งาน + **ประวัติสนทนา 5 รอบล่าสุด**
-- ใช้ประวัติสนทนาเพื่อ resolve การอ้างอิงข้ามรอบ เช่น "ปิดมันด้วย" หรือ "ลดลงอีกนิด"
-- `temperature=0.1` เพื่อความแม่นยำ
-- คืน `tool_calls[]` เท่านั้น — ไม่มีคำพูดภาษาคน
+- รู้ **วันเวลาปัจจุบัน** — formulate web search query ได้ถูกต้อง เช่น "ข่าววันนี้" → query ที่ระบุวันที่จริง
+- ได้รับ device list (human-readable summary ไม่ใช่ raw JSON) + skills ที่เปิด + ประวัติสนทนา
+- รองรับคำสั่ง **ตรง** ("เปิดไฟ") และ **อ้อมค้อม** ("มืดมากเลย" → เปิดไฟ)
+- guard ชัดเจน: ไม่เรียก tool สำหรับ greetings / small talk / คำถามเกี่ยวกับตัว AI
+- `temperature=0.1` · คืน `tool_calls[]` เท่านั้น
 
 ### Tool Executor Node — รันจริง
 
-- รัน tool calls **พร้อมกันทั้งหมด** (Promise.all) — tools ที่ independent ไม่ต้องรอกัน
-- UI แสดง ToolPill แต่ละตัวพร้อมกัน พร้อม label `R1` / `R2` บอก round
-- logic แต่ละ skill อยู่ใน `agentSkills.js` แยกต่างหาก — เพิ่ม skill ใหม่ไม่ต้องแตะ App.jsx
+- รัน tool calls **พร้อมกันทั้งหมด** (Promise.all)
+- UI แสดง ToolPill แต่ละตัวพร้อม label `R1` / `R2` บอก round
+- **web_search** ดึงข้อมูลจาก Serper แล้วแปลงเป็น plain text ทันที (answerBox + knowledgeGraph + organic snippets) — ส่งเนื้อหาครบถ้วนต่อให้ responder โดยไม่ผ่าน LLM summarizer เพื่อไม่ให้สาระสำคัญหาย
 
-### Planner Node — ตัดสินใจ Round 2
+### Planner Node — Completion Checker (R2)
 
-- รับ history ครบ: tool ที่รันไป + args + result ทุกตัว + **ประวัติสนทนา 5 รอบล่าสุด**
-- ใช้ประวัติสนทนาเพื่อเข้าใจ intent แบบ multi-turn เช่น "ทำแบบเดิมกับห้องนั่งเล่นด้วย"
-- ข้าม planner อัตโนมัติถ้า round 1 มีแค่ mqtt_publish ล้วนๆ (ไม่มีข้อมูลใหม่ให้คิด)
-- **Ground-truth guard:** executed history คือ source of truth — tool ที่ succeed ไปแล้วกับ target เดิมจะไม่ถูกเรียกซ้ำ แต่สามารถเรียก tool เดิมกับ device หรือ topic อื่นได้ถ้า request ยังไม่ครบ
-- ตัดสินใจได้หลายแบบ: เรียก tool เพิ่มสำหรับ target ที่ยังค้าง, recovery จาก failure, หรือคืนค่า DONE เพื่อจบงาน
+- ทำงานเป็น **completion checker** ไม่ใช่ planner ทั่วไป — ถามว่า "ครบทุก target มั้ย?"
+- อ่าน executed results ในรูป human-readable (`✅ mqtt_publish → Lamp (Living Room) = true`) ไม่ใช่ raw JSON
+- ใช้ประวัติสนทนาเพื่อ resolve multi-turn reference เช่น "ทำแบบเดิมกับห้องนั่งเล่นด้วย"
+- ข้าม planner อัตโนมัติถ้า round 1 มีแค่ mqtt_publish สำเร็จ (ไม่มีข้อมูลใหม่ให้คิด)
+- tool ที่ succeed แล้วจะไม่ถูกเรียกซ้ำ — retry เฉพาะ target ที่ fail หรือยังขาดอยู่
 
 ### Responder Node — ตอบผู้ใช้
 
-- ได้ข้อมูลครบ: system prompt, ชื่อ user, สถานะบ้านปัจจุบัน, ผลลัพธ์ทุก tool
-- `temperature=0.7` — ตอบแบบธรรมชาติ
-- Stream คำตอบทีละ token
+- รู้ **วันเวลาปัจจุบัน** — ตอบคำถาม time-sensitive ได้แม่นยำ แต่ไม่บอกเวลาโดยไม่จำเป็น
+- เห็น device state เฉพาะตอนที่ไม่มี tool รัน (ป้องกัน snapshot เก่าขัดแย้งกับ tool result)
+- `temperature=0.7` · stream คำตอบทีละ token
 
 ---
 
@@ -193,7 +207,7 @@ npm run build    # production build
 | `mqtt_publish` | publish payload ไปยัง device topic | MQTT |
 | `mqtt_read` | อ่านค่าล่าสุดจาก sensor topic | MQTT |
 | `os_command` | แปลภาษาคนเป็น terminal command แล้วส่งไปยัง os_terminal device | MQTT |
-| `web_search` | ค้นหาข้อมูลจากอินเทอร์เน็ตผ่าน Serper API | Serper API Key |
+| `web_search` | ค้นหาข้อมูลผ่าน Serper API → synthesizer สรุปผลก่อนส่ง agent | Serper API Key |
 
 เปิด/ปิด skill ได้ที่ Settings → Section 03 — skill ที่ปิดจะถูกบล็อกทั้งจาก tool list ที่ LLM เห็น และที่ชั้น execution ดังนั้น tool ที่ disabled จะไม่ทำงานได้แม้ในกรณี prompt injection
 

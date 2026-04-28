@@ -28,7 +28,7 @@ export const DEFAULT_SETTINGS = {
   apiKey: '',
   systemPrompt:
     'คุณคือ AI ผู้ช่วยบ้านอัจฉริยะ (Smart Home Assistant) นิสัยเป็นกันเอง ร่าเริง ชอบช่วยเหลือ ตอบคำถามด้วยภาษาที่เข้าใจง่าย สั้น กระชับ ไม่ต้องอธิบายเรื่องเทคนิค และมักจะใช้ Emoji ประกอบเสมอ',
-  profile: { name: 'Mira K.' },
+  profile: { name: 'Mira K.', assistantName: 'Assistant' },
   serperApiKey: '',
   skills: [
     {
@@ -57,7 +57,7 @@ export const DEFAULT_SETTINGS = {
     {
       id: 'web_search',
       name: 'web_search',
-      description: 'Search the web for real-world information, current events, news, facts, or anything outside the smart home device context. Requires Serper API key in Settings → Integrations.',
+      description: 'Search the web only when the user explicitly requests external information (news, weather, prices, facts). Do not use for greetings, small talk, or general conversation.',
       enabled: true,
       schema:
         '{"type":"object","properties":{"query":{"type":"string","description":"Concise and specific search query"}},"required":["query"]}',
