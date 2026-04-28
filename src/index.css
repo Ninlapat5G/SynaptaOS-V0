@@ -604,6 +604,17 @@
   }
   .sh-msg-who { @apply text-[9px] tracking-widest mb-1; color: var(--ink-xdim); }
 
+  /* markdown rendering inside AI bubbles */
+  .sh-md-link { color: oklch(var(--accent-l) var(--accent-c) var(--accent-h)); text-decoration: underline; text-underline-offset: 2px; word-break: break-all; }
+  .sh-md-link:hover { opacity: 0.8; }
+  .sh-md-code { @apply px-1 py-0.5 rounded text-[11px]; background: var(--bg); font-family: var(--font-mono); }
+  .sh-md-pre  { @apply p-2.5 rounded-lg text-[11px] overflow-x-auto my-1.5; background: var(--bg); font-family: var(--font-mono); line-height: 1.5; }
+  .sh-msg-text p      { @apply mb-1.5 last:mb-0; }
+  .sh-msg-text ul     { @apply list-disc pl-4 mb-1.5 space-y-0.5; }
+  .sh-msg-text ol     { @apply list-decimal pl-4 mb-1.5 space-y-0.5; }
+  .sh-msg-text strong { font-weight: 600; }
+  .sh-msg-text h1, .sh-msg-text h2, .sh-msg-text h3 { font-weight: 600; margin-bottom: 4px; }
+
   .sh-typing { @apply flex gap-1 py-0.5; }
   .sh-typing span {
     @apply w-1.5 h-1.5 rounded-full;

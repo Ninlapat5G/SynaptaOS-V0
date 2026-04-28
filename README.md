@@ -59,6 +59,7 @@ Device Cards อัปเดต real-time (MQTT QoS 2)
 | UI Framework | React 18 + Vite 5 |
 | Styling | Tailwind CSS v3 + CSS custom properties (`oklch`) |
 | Animation | Framer Motion (spring, stagger, AnimatePresence, useMotionValue) |
+| Markdown | `react-markdown` — AI responses render bold, lists, code blocks, clickable links |
 | IoT Protocol | MQTT over WebSocket — `mqtt.js` v5 · **QoS 2** · auto-reconnect |
 | AI / LLM | OpenAI-compatible API · รองรับ Typhoon, OpenAI, OpenRouter, Ollama และทุก provider ที่ใช้ `/chat/completions` |
 | Agent | Mini graph engine — router → tool_executor → planner → responder |

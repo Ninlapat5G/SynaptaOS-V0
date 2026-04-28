@@ -1,6 +1,18 @@
 import { motion } from 'framer-motion'
+import ReactMarkdown from 'react-markdown'
 import Icon from '../ui/Icon'
 import ToolPill from './ToolPill'
+
+const mdComponents = {
+  a: ({ href, children }) => (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="sh-md-link">
+      {children}
+    </a>
+  ),
+  code: ({ inline, children }) => inline
+    ? <code className="sh-md-code">{children}</code>
+    : <pre className="sh-md-pre"><code>{children}</code></pre>,
+}
 
 export default function ChatBubble({ msg }) {
   if (msg.role === 'tool') {
@@ -28,7 +40,12 @@ export default function ChatBubble({ msg }) {
       )}
       <div className="sh-msg-bubble">
         {!isUser && <div className="sh-msg-who mono">ASSISTANT</div>}
-        <div className="sh-msg-text">{msg.text}</div>
+        <div className="sh-msg-text">
+          {isUser
+            ? msg.text
+            : <ReactMarkdown components={mdComponents}>{msg.text}</ReactMarkdown>
+          }
+        </div>
       </div>
     </motion.div>
   )
