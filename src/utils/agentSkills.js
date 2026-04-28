@@ -128,7 +128,8 @@ async function webSearch(args, ctx) {
   if (data.knowledgeGraph?.description)
     parts.push(`${data.knowledgeGraph.title}: ${data.knowledgeGraph.description}`)
 
-  const organic = (data.organic || []).slice(0, 5)
+  // ✨ ลดเหลือ 3 อัน ป้องกันปัญหา Context ล้น
+  const organic = (data.organic || []).slice(0, 3)
   if (organic.length)
     parts.push(organic.map(r => `${r.title}\n${r.snippet}\n${r.link}`).join('\n\n'))
 

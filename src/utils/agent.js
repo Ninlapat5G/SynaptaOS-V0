@@ -136,8 +136,6 @@ function summarizeDevices(deviceList) {
 }
 
 // ── Responder Tool Context Formatter ─────────────────────────────────────────
-// Plain-text version of tool results for the responder.
-// Unlike summarizeResults (terse, for planner), this preserves full content.
 
 function formatResultsForResponder(allToolResults) {
   return allToolResults.map(t => {
@@ -164,16 +162,13 @@ function formatResultsForResponder(allToolResults) {
 }
 
 // ── Planner Guard ──────────────────────────────────────────────────────────────
-// Returns true only if tool results contain data worth reasoning about.
-// Pure fire-and-forget tools (mqtt_publish success) skip the planner entirely.
 
 function shouldRunPlanner(toolResults) {
   return toolResults.some(r => {
-    if (r.result?.error !== undefined) return true   // any failure → planner may recover
-    if (r.result?.value !== undefined) return true   // mqtt_read returned sensor data
-    if (r.result?.summary !== undefined) return true // web_search / os_command with output
+    if (r.result?.error !== undefined) return true
+    if (r.result?.value !== undefined) return true
+    if (r.result?.summary !== undefined) return true
     return false
-    // mqtt_publish success: { success, topic, payload } — nothing to reason about
   })
 }
 
@@ -241,14 +236,12 @@ async function toolExecutorNode(state) {
   const { toolCalls, executeTool, onToolCall, onToolResult, settings, apiHistory = [], signal } = state
   const round = (state.toolRound || 0) + 1   // 1-indexed label for UI
 
-  // Run all tool calls in parallel — independent tools don't need to wait for each other
   const toolResults = await Promise.all(
     toolCalls.map(async tc => {
       const name = tc.function.name
       let args = {}
       try { args = JSON.parse(tc.function.arguments || '{}') } catch { args = tc.function.arguments }
 
-      // ✨ [NEW] Intercept web_search to refine the query using conversation history
       if (name === 'web_search' && args.query) {
         args.query = await generateSearchQuery({ settings, query: args.query, apiHistory, signal })
       }
@@ -296,13 +289,11 @@ Check: does every target in the user's intent have a successful result above?
 - All targets done → return empty (no tool calls).
 - A target is missing → call the tool for that specific target only.
 - A call failed → retry once with corrected arguments if fixable.
-- STRICT RULE: NEVER repeat a tool call with the same arguments. If web_search already succeeded for a query, DO NOT search for it again.
 
 Tool chaining rule:
-- If web_search already returned results and the user wants to open a URL on a remote machine:
-  Extract the most relevant URL from the search result and call "os_command" IMMEDIATELY.
-  Example instruction: "open this URL in the browser: https://www.youtube.com/watch?v=xxxxx"
-  Do NOT write a vague instruction like "open the song" — the URL must be in the instruction.`
+- If the results above contain a URL from web_search, and the user's goal is to open or play something, you MUST call "os_command" to execute it immediately.
+- Example instruction: "open this URL in the browser: https://www.youtube.com/watch?v=xxxxx"
+- Do NOT write a vague instruction. Always include the actual URL in the command.`
 
   let data
   try {
@@ -316,8 +307,29 @@ Tool chaining rule:
     throw new Error(`Planner: ${err.message}`)
   }
 
-  const msg = data?.choices?.[0]?.message
-  return { ...state, toolCalls: msg?.tool_calls || [] }
+  const rawToolCalls = data?.choices?.[0]?.message?.tool_calls || []
+
+  // ✨ Argument-Level Masking (ป้องกันลูปแบบ 100% สำหรับทุก Tools)
+  const successfulCalls = allToolResults.filter(r => !r.result?.error)
+
+  const filteredToolCalls = rawToolCalls.filter(newCall => {
+    let newArgs = {}
+    try { newArgs = JSON.parse(newCall.function.arguments || '{}') } catch { }
+
+    const isDuplicate = successfulCalls.some(pastCall => {
+      if (pastCall.name !== newCall.function.name) return false
+
+      const pastKeys = Object.keys(pastCall.args || {})
+      const newKeys = Object.keys(newArgs)
+
+      if (pastKeys.length !== newKeys.length) return false
+      return pastKeys.every(k => String(pastCall.args[k]) === String(newArgs[k]))
+    })
+
+    return !isDuplicate
+  })
+
+  return { ...state, toolCalls: filteredToolCalls }
 }
 
 async function responderNode(state) {
@@ -436,12 +448,12 @@ Your task is to analyze the conversation history and the user's intended search 
 Rules:
 - Output ONLY the raw search query string. No explanation, no quotes.
 - Resolve pronouns (e.g., "หาข้อมูลเรื่องนั้นต่อ", "ขอเพลงที่คุยกันเมื่อกี้") by looking at the history.
-- Extract only the essential keywords needed for a good search engine result.
+- Extract only the essential keywords needed for a good search engine result. 
+- MUST remove conversational filler words like "หาเพลง", "เปิด", "search for", "ขอวิดีโอ" and output ONLY the core entity/topic.
 - If the original query is already perfect and clear, output it exactly as is.`
 
 export async function generateSearchQuery({ settings, query, apiHistory, signal }) {
   const llm = createLLMClient(settings)
-  // ดึงประวัติแค่ 4 ข้อความล่าสุดมาประกอบบริบท เพื่อไม่ให้รกเกินไป
   const recentHistory = (apiHistory || []).slice(-4)
 
   try {
