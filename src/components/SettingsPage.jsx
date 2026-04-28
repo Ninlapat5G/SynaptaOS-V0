@@ -108,9 +108,15 @@ export default function SettingsPage({ settings, onSave, mqttStatus = 'offline',
               <div className="sh-sect-num mono">01</div>
               <div><h3>Profile</h3><p>ชื่อและบทบาทของผู้ใช้งาน</p></div>
             </div>
-            <div className="sh-field">
-              <label className="mono">Display Name</label>
-              <input value={s.profile?.name || ''} onChange={e => setPro('name', e.target.value)} placeholder="Your name" />
+            <div className="sh-grid2">
+              <div className="sh-field">
+                <label className="mono">Display Name</label>
+                <input value={s.profile?.name || ''} onChange={e => setPro('name', e.target.value)} placeholder="Your name" />
+              </div>
+              <div className="sh-field">
+                <label className="mono">Assistant Name</label>
+                <input value={s.profile?.assistantName || ''} onChange={e => setPro('assistantName', e.target.value)} placeholder="Assistant" />
+              </div>
             </div>
           </section>
 

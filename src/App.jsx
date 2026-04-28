@@ -327,6 +327,7 @@ export default function App() {
                     msgCount={messages.filter(m => m.role === 'user').length}
                     draft={chatDraft}
                     onDraftChange={setChatDraft}
+                    assistantName={settings.profile?.assistantName || 'Assistant'}
                   />
                 </ErrorBoundary>
               </motion.div>
