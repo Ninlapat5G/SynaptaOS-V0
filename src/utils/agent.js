@@ -92,6 +92,44 @@ function buildTools(settings) {
     })
 }
 
+// ── Result Summarizer ─────────────────────────────────────────────────────────
+
+function summarizeResults(allToolResults, deviceList) {
+  return allToolResults.map(r => {
+    const ok = r.result?.error === undefined
+    const icon = ok ? '✅' : '❌'
+    const device = deviceList?.find(d => d.pubTopic === r.args?.topic || d.subTopic === r.args?.topic)
+    const label = device ? `${device.name} (${device.room})` : r.args?.topic || r.args?.query || ''
+
+    switch (r.name) {
+      case 'mqtt_publish':
+        return ok
+          ? `${icon} mqtt_publish → ${label} = ${r.args.payload}`
+          : `${icon} mqtt_publish → ${label} failed: ${r.result.error}`
+      case 'mqtt_read':
+        return ok
+          ? `${icon} mqtt_read → ${label} = ${r.result.value}`
+          : `${icon} mqtt_read → ${label} failed: ${r.result.error}`
+      case 'web_search':
+        return ok ? `${icon} web_search → got results` : `${icon} web_search failed: ${r.result.error}`
+      case 'os_command':
+        return ok
+          ? `${icon} os_command → ${r.result.output ?? 'executed'}`
+          : `${icon} os_command failed: ${r.result.error}`
+      default:
+        return `${icon} ${r.name}: ${ok ? 'success' : r.result.error}`
+    }
+  }).join('\n')
+}
+
+function summarizeDevices(deviceList) {
+  return (deviceList || [])
+    .map(d => d.type === 'analog'
+      ? `${d.name} (${d.room}) — analog, max ${d.max ?? 255}, pubTopic: ${d.pubTopic}`
+      : `${d.name} (${d.room}) — digital, pubTopic: ${d.pubTopic}`)
+    .join('\n') || 'No devices registered'
+}
+
 // ── Planner Guard ──────────────────────────────────────────────────────────────
 // Returns true only if tool results contain data worth reasoning about.
 // Pure fire-and-forget tools (mqtt_publish success) skip the planner entirely.
@@ -135,7 +173,7 @@ web_search — call when the user explicitly needs current external information 
   Do NOT call if the answer is already known or the question is conversational.
 
 Available devices:
-${JSON.stringify(deviceList, null, 2)}`
+${summarizeDevices(deviceList)}`
 
   let data
   try {
@@ -204,8 +242,12 @@ async function plannerNode(state) {
   const systemPrompt = `You are a completion checker. Output tool calls only — no text.
 
 User request: "${text}"
-Executed so far: ${JSON.stringify(executedHistory, null, 2)}
-Available devices: ${JSON.stringify(deviceList, null, 2)}
+
+Executed so far:
+${summarizeResults(allToolResults, deviceList)}
+
+Available devices:
+${summarizeDevices(deviceList)}
 
 Check: does every target in the request have a successful result above?
 - All targets done → return empty (no tool calls).
@@ -216,7 +258,7 @@ Check: does every target in the request have a successful result above?
   let data
   try {
     data = await llm.chat(
-      [{ role: 'system', content: systemPrompt }, ...apiHistory, { role: 'user', content: text }],
+      [{ role: 'system', content: systemPrompt }, { role: 'user', content: text }],
       { ...(tools.length ? { tools, tool_choice: 'auto' } : {}), temperature: 0.1, max_tokens: 1024 },
       signal
     )
