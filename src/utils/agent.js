@@ -211,6 +211,8 @@ mqtt_read — call only when the user is asking for the current value of a senso
 os_command — call when the user wants to run a command on a remote machine AND an os_terminal device exists.
   Use the OS shown in the device list (e.g. "os_terminal (windows)") as the "os" argument — do NOT guess.
   wait_output: true for commands that return output (ls, dir, cat). false for fire-and-forget (shutdown, open app).
+  IMPORTANT: If the command requires opening a URL that is not yet known (e.g. a song, video, website),
+  call web_search FIRST to find the real URL. Do NOT call os_command in the same round — the planner will follow up with the actual URL.
 
 web_search — call when the user explicitly needs current external information that cannot be answered from context.
   e.g. "search for...", "what's the weather?", "latest news about..."
@@ -291,7 +293,10 @@ Check: does every target in the request have a successful result above?
 - All targets done → return empty (no tool calls).
 - A target is missing → call the tool for that specific target only.
 - A call failed → retry once with corrected arguments if fixable.
-- Never repeat a call that already succeeded. Never add calls unrelated to the original request.`
+- Never repeat a call that already succeeded. Never add calls unrelated to the original request.
+
+Tool chaining rule:
+- If web_search already returned a URL or link, and the user wants to open it on a remote machine → call os_command now with the real URL from the search result as part of the instruction.`
 
   let data
   try {
