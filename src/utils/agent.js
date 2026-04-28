@@ -103,19 +103,22 @@ function shouldRunPlanner(toolResults) {
 // ── Agent Nodes ────────────────────────────────────────────────────────────────
 
 async function routerNode(state) {
-  const { text, settings, deviceList, signal } = state
+  const { text, settings, deviceList, apiHistory = [], signal } = state
   const llm = createLLMClient(settings)
   const tools = buildTools(settings)
 
-  const systemPrompt = `You are an invisible IoT Routing Agent. Select tools to control or read devices.
-RULES:
+  const systemPrompt = `You are an IoT dispatch engine — silent, invisible, and purely mechanical.
+Your entire output is tool calls. If no tool fits, your output is empty.
+
+The conversation above shows what the user has been doing.
+Draw on it only to resolve what the current message refers to (a device name, a previous topic, a value already mentioned).
+
+Dispatch rules:
 1. mqtt_publish: use the EXACT pubTopic from the device list — never shorten or invent topics.
 2. Digital payload: exactly "true" or "false".
 3. Analog payload: number string from "0" to the device's max value (see "max" field, default 255, may be 1023).
 4. os_command: set instruction = user's exact request, os = device's "os" field, topic = device's pubTopic. Only call when an os_terminal device exists. Set wait_output: true only for commands that produce output (dir, ls, cat, pwd, ipconfig, etc.) — false for fire-and-forget (shutdown, reboot, open app, kill process, etc.).
 5. web_search: use when the user asks for real-world information outside the device context (news, weather, prices, facts, definitions). Write a precise English query unless Thai sources are explicitly requested.
-6. If no tool is needed: return no tool calls.
-7. No conversational text — only tool calls or nothing.
 
 Available devices:
 ${JSON.stringify(deviceList, null, 2)}`
@@ -123,7 +126,7 @@ ${JSON.stringify(deviceList, null, 2)}`
   let data
   try {
     data = await llm.chat(
-      [{ role: 'system', content: systemPrompt }, { role: 'user', content: text }],
+      [{ role: 'system', content: systemPrompt }, ...apiHistory, { role: 'user', content: text }],
       { tools: tools.length ? tools : undefined, tool_choice: 'auto', temperature: 0.1, max_tokens: 4096 },
       signal
     )
@@ -173,7 +176,7 @@ async function toolExecutorNode(state) {
 }
 
 async function plannerNode(state) {
-  const { text, settings, deviceList, allToolResults, toolRound, signal } = state
+  const { text, settings, deviceList, allToolResults, toolRound, apiHistory = [], signal } = state
   const llm = createLLMClient(settings)
 
   const executedNames = new Set(allToolResults.map(r => r.name))
@@ -201,20 +204,16 @@ Look at the search results above and decide ONE of:
 A) A specific device action can be derived from the data → call that device tool.
 B) The results are informational only → DONE.` : ''
 
-  // System Prompt แบบดุดัน ไม่เกรงใจ SLM
-  const systemPrompt = `You are a Reactive Planner. Round ${toolRound} of tool execution just completed.
-Decide whether a follow-up device action is strictly necessary to fully satisfy the user's request.
+  const systemPrompt = `You are a reactive planner. Round ${toolRound} of tool execution just finished.
+Look at what was executed and decide: is the user's request fully handled, or does one specific follow-up action remain?
 
-CRITICAL RULES:
-1. STRICTLY MATCH USER INTENT: Only select tools for devices the user explicitly asked to control in the "Original request".
-2. DO NOT GUESS OR INVENT ACTIONS: If the target device is not found, or the requested action is already in [Already executed], YOU MUST STOP. Do not control other unrequested devices.
-3. DEFAULT TO DONE: If the requested actions are complete, or no further tools match the user's exact instruction, return NO TOOL CALLS (which means DONE).
-4. No conversational text — only tool calls (= continue) or no tool calls (= DONE).
+Your output is either a single tool call (if something concrete is still needed) or nothing (if the work is done).
+The conversation above gives you context — use it to understand what the user has been working toward, not to generate any reply.
 ${postSearchNote}
 
-Original request: "${text}"
+Request: "${text}"
 
-Already executed (tool · args · result):
+Executed so far:
 ${JSON.stringify(executedHistory, null, 2)}
 
 Available devices:
@@ -223,7 +222,7 @@ ${JSON.stringify(deviceList, null, 2)}`
   let data
   try {
     data = await llm.chat(
-      [{ role: 'system', content: systemPrompt }],
+      [{ role: 'system', content: systemPrompt }, ...apiHistory, { role: 'user', content: text }],
       { tools: tools.length ? tools : undefined, tool_choice: 'auto', temperature: 0.1, max_tokens: 1024 },
       signal
     )

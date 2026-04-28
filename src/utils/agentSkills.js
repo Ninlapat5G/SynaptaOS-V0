@@ -148,6 +148,8 @@ const toolHandlers = {
 
 export function createExecuteTool(ctx) {
   return async function executeTool(name, args) {
+    const skill = (ctx.settings.skills || []).find(sk => sk.name === name)
+    if (skill && !skill.enabled) return { success: false, error: `Tool "${name}" is disabled` }
     const handler = toolHandlers[name]
     if (!handler) return { success: false, error: `Unknown tool: ${name}` }
     return handler(args, ctx)
