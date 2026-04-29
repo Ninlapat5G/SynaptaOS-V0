@@ -1,6 +1,6 @@
 import { StateGraph, START, END, Annotation } from "@langchain/langgraph";
 import { ChatOpenAI } from "@langchain/openai";
-import { HumanMessage, SystemMessage, AIMessage } from "@langchain/core/messages";
+import { HumanMessage, SystemMessage, AIMessage, ToolMessage } from "@langchain/core/messages";
 
 // ── 0. Helpers ────────────────────────────────────────────────────────────────
 function nowString() {
@@ -39,6 +39,11 @@ const AgentState = Annotation.Root({
   settings: Annotation(),
   deviceList: Annotation(),
   apiHistory: Annotation(),
+  // ✨ ทีเด็ดอยู่ตรงนี้: เพิ่ม reactHistory ไว้เก็บ Tool Message ตามสเปกเป๊ะๆ
+  reactHistory: Annotation({
+    reducer: (curr, next) => curr.concat(next),
+    default: () => []
+  }),
   allToolResults: Annotation({
     reducer: (curr, next) => curr.concat(next),
     default: () => []
@@ -51,7 +56,7 @@ const AgentState = Annotation.Root({
   onStream: Annotation(),
   signal: Annotation(),
   toolRound: Annotation({
-    reducer: (curr, next) => next, // เก็บค่าล่าสุด
+    reducer: (curr, next) => next,
     default: () => 0
   })
 });
@@ -59,7 +64,7 @@ const AgentState = Annotation.Root({
 // ── 2. Nodes ──────────────────────────────────────────────────────────────
 
 async function routerNode(state) {
-  const { settings, text, deviceList, apiHistory, signal, allToolResults } = state;
+  const { settings, text, deviceList, apiHistory, reactHistory, signal } = state;
 
   const llm = new ChatOpenAI({
     openAIApiKey: settings.apiKey,
@@ -77,25 +82,21 @@ Current date & time: ${nowString()}
 Available devices:
 ${summarizeDevices(deviceList)}
 
-Return EMPTY (no tool calls) when the message is pure conversation.`;
+Return EMPTY (no tool calls) when the message is pure conversation or if you have already executed the necessary tools successfully.`;
 
+  // ประกอบร่าง Messages 
   const messages = [
     new SystemMessage(systemPrompt),
     ...apiHistory.map(m => m.role === 'user' ? new HumanMessage(m.content) : new AIMessage(m.content)),
+    new HumanMessage(text),
+    ...reactHistory // ✨ ใส่ประวัติการรัน Tool ที่ถูกต้องลงไป
   ];
-
-  // ถ้านี่คือการวนลูป (มีผลลัพธ์ tool ก่อนหน้า) ให้ใส่ผลลัพธ์เข้าไปให้มันพิจารณาด้วย
-  if (allToolResults.length > 0) {
-    const toolSummary = allToolResults.map(r => `[${r.name}] ${JSON.stringify(r.result)}`).join('\n');
-    messages.push(new HumanMessage(`${text}\n\n[Previous Tool Results]:\n${toolSummary}\n\nDo we need to call any more tools to complete the user's request? If yes, call them. If no, just output text to finish.`));
-  } else {
-    messages.push(new HumanMessage(text));
-  }
 
   const response = await boundLlm.invoke(messages, { signal });
 
   return {
-    toolCalls: response.tool_calls || []
+    toolCalls: response.tool_calls || [],
+    reactHistory: [response] // ✨ เก็บตัว AIMessage ที่พ่น Tool ออกมา ลง History ด้วย
   };
 }
 
@@ -103,6 +104,7 @@ async function toolExecutorNode(state) {
   const { toolCalls, executeTool, onToolCall, onToolResult, toolRound } = state;
   const currentRound = toolRound + 1;
   const results = [];
+  const toolMessages = [];
 
   for (const tc of toolCalls) {
     onToolCall?.(tc.name, tc.args, currentRound);
@@ -114,9 +116,21 @@ async function toolExecutorNode(state) {
     }
     onToolResult?.(tc.name, tc.args, result, currentRound);
     results.push({ name: tc.name, args: tc.args, result });
+
+    // ✨ สร้าง ToolMessage และแนบ tool_call_id คืนไปให้มันรู้ตัวว่าสั่งงานสำเร็จแล้ว
+    toolMessages.push(new ToolMessage({
+      content: typeof result === 'object' ? JSON.stringify(result) : String(result),
+      name: tc.name,
+      tool_call_id: tc.id
+    }));
   }
 
-  return { allToolResults: results, toolCalls: [], toolRound: currentRound };
+  return {
+    allToolResults: results,
+    toolCalls: [],
+    toolRound: currentRound,
+    reactHistory: toolMessages // ✨ เอาผลลัพธ์ยัดกลับเข้า History ให้มันไปคิดต่อ
+  };
 }
 
 async function responderNode(state) {
@@ -139,13 +153,14 @@ async function responderNode(state) {
 ${stateSummary}
 
 [IMPORTANT GUARDRAILS]
-- If the user asks to control a device or run a command, and the [Tool Results] indicates NO tools were executed or a tool failed, you MUST NOT pretend the action was successful. Apologize and state the failure.`;
+- If the user asks to control a device or run a command, and the [System: Tool Results] indicates NO tools were executed or a tool failed, you MUST NOT pretend the action was successful. Apologize and state the failure.`;
 
   const messages = [
     new SystemMessage(systemPrompt),
     ...apiHistory.map(m => m.role === 'user' ? new HumanMessage(m.content) : new AIMessage(m.content)),
   ];
 
+  // ให้ Responder อ่านเฉพาะผลลัพธ์สุทธิ ไม่ต้องไปปวดหัวกับ ID แบบ Router
   if (allToolResults.length > 0) {
     const toolSummary = allToolResults.map(r => `[${r.name}] ${JSON.stringify(r.result)}`).join('\n');
     messages.push(new HumanMessage(`${text}\n\n[System: Tool Results]\n${toolSummary}`));
@@ -153,7 +168,6 @@ ${stateSummary}
     messages.push(new HumanMessage(`${text}\n\n[System: No tools were executed for this request.]`));
   }
 
-  // ✨ จัดการ Streaming ให้ส่งกลับไปที่หน้า UI ทีละตัวอักษร
   let replyText = "";
   const stream = await llm.stream(messages, { signal });
   for await (const chunk of stream) {
@@ -175,24 +189,24 @@ const workflow = new StateGraph(AgentState)
   .addConditionalEdges("router", (state) => {
     return state.toolCalls?.length > 0 ? "toolExecutor" : "responder";
   })
-  .addEdge("toolExecutor", "router") // ✨ ReAct Loop
+  .addEdge("toolExecutor", "router") // ✨ ReAct Loop ของแทร่!
   .addEdge("responder", END);
 
 const compiledGraph = workflow.compile();
 
 // ── 4. Public API ────────────────────────────────────────────────────────
 export const runAgent = async (params) => {
-  // รัน Graph
   const finalState = await compiledGraph.invoke({
     ...params,
     allToolResults: [],
+    reactHistory: [],
     toolRound: 0,
     toolCalls: []
   });
   return { reply: finalState.reply, allToolResults: finalState.allToolResults };
 };
 
-// ── 5. Sub-agents (ยังต้องใช้ใน agentSkills.js) ─────────────────────────
+// ── 5. Sub-agents ────────────────────────────────────────────────────────
 
 export async function generateOsCommand({ settings, instruction, os, signal }) {
   const llm = new ChatOpenAI({
