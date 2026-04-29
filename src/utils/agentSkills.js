@@ -133,7 +133,7 @@ async function webSearch(args, ctx) {
     res = await fetch(SERPER_URL, {
       method: 'POST',
       headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ q: optimizedQuery, num: 5 }),
+      body: JSON.stringify({ q: optimizedQuery, num: 3 }),
     })
   } catch (err) {
     return { success: false, error: `Network error: ${err.message}` }

@@ -83,7 +83,7 @@ export function useChat({ settings, devicesRef, executeTool }) {
         ...prev,
         { role: 'user', content: text },
         { role: 'assistant', content: reply },
-      ].slice(-10))
+      ].slice(-30))
 
     } catch (err) {
       if (err.name === 'AbortError') {

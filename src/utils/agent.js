@@ -164,8 +164,9 @@ export const runAgent = async (params) => {
   );
   rawMessages.push(new HumanMessage(params.text));
 
+  // Budget: 128K context − ~3,750 overhead − 1.5× Thai underestimate factor → safe at 20K
   const previousMessages = await trimMessages(rawMessages, {
-    maxTokens: 4000,
+    maxTokens: 20000,
     tokenCounter: msgs => msgs.reduce((sum, m) => sum + Math.ceil(String(m.content).length / 3), 0),
     strategy: 'last',
     startOn: 'human',
@@ -196,15 +197,20 @@ export async function generateOsCommand({ settings, instruction, os, signal }) {
     configuration: { apiKey: settings.apiKey, baseURL: settings.endpoint, dangerouslyAllowBrowser: true },
     modelName: settings.model,
     temperature: 0,
+  }).withStructuredOutput({
+    type: 'object',
+    properties: {
+      command: { type: 'string', description: 'The exact terminal command to execute, or UNSAFE' }
+    },
+    required: ['command']
   });
 
   const OS_COMMAND_SYSTEM = `You are a strict OS Command Translator.
 Target OS: ${os}
 Task: Convert the instruction into a valid, executable terminal command.
 [RULES]
-1. OUTPUT ONLY THE RAW COMMAND STRING.
-2. NO markdown formatting, NO explanations.
-3. If highly destructive/malicious, output EXACTLY: UNSAFE`;
+1. Return the raw command in the "command" field — no markdown, no explanations.
+2. If highly destructive/malicious, return EXACTLY: UNSAFE`;
 
   const messages = [
     new SystemMessage(OS_COMMAND_SYSTEM),
@@ -212,12 +218,12 @@ Task: Convert the instruction into a valid, executable terminal command.
   ];
 
   const response = await llm.invoke(messages, { signal });
-  const cmd = response.content.trim();
+  const cmd = response.command?.trim();
 
   if (!cmd) throw new Error('ไม่สามารถสร้างคำสั่งได้');
   if (cmd === 'UNSAFE') throw new Error('คำสั่งนี้มีความเสี่ยงสูง — ระบบปฏิเสธการรัน');
 
-  return cmd.replace(/^```[a-z]*\n/i, '').replace(/\n```$/i, '').trim();
+  return cmd;
 }
 
 export async function generateSearchQuery({ settings, query, signal }) {
@@ -226,28 +232,30 @@ export async function generateSearchQuery({ settings, query, signal }) {
     configuration: { apiKey: settings.apiKey, baseURL: settings.endpoint, dangerouslyAllowBrowser: true },
     modelName: settings.model,
     temperature: 0.1,
+  }).withStructuredOutput({
+    type: 'object',
+    properties: {
+      query: { type: 'string', description: 'Optimized search query for web search engine' }
+    },
+    required: ['query']
   });
 
   const SEARCH_QUERY_SYSTEM = `You are a Search Query Optimizer.
 Task: Clean and optimize the provided text for a web search engine.
 [RULES]
-1. OUTPUT ONLY THE RAW SEARCH QUERY. No quotes, no explanations.
+1. Return the optimized query in the "query" field.
 2. Remove conversational fillers.
 3. Keep the most relevant keywords.`;
 
   const messages = [
     new SystemMessage(SEARCH_QUERY_SYSTEM),
-    new HumanMessage(`Raw query: "${query}"\nOptimized query:`)
+    new HumanMessage(`Raw query: "${query}"`)
   ];
 
   try {
     const response = await llm.invoke(messages, { signal });
-    let optimizedQuery = response.content.trim();
-    if (optimizedQuery.startsWith('"') && optimizedQuery.endsWith('"')) {
-      optimizedQuery = optimizedQuery.slice(1, -1);
-    }
-    return optimizedQuery || query;
-  } catch (err) {
+    return response.query?.trim() || query;
+  } catch {
     return query;
   }
 }
