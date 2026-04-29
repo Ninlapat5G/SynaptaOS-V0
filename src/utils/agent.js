@@ -59,10 +59,19 @@ async function agentNode(state) {
 
   // ⚙️ LLM Config (ใช้ apiKey และ baseURL แบบไม่เบิ้ล path)
   const llm = new ChatOpenAI({
+    // ใส่ดักไว้ข้างนอกแบบที่ LangChain คาดหวัง
+    openAIApiKey: settings.apiKey,
     apiKey: settings.apiKey,
-    configuration: { baseURL: settings.endpoint },
+
+    // ✨ ทีเด็ดอยู่ตรงนี้! ยัดใส่ configuration ไปด้วยเลย ไอ้ตัวลูกข้างในจะได้ไม่งอแง
+    configuration: {
+      apiKey: settings.apiKey,
+      baseURL: settings.endpoint,
+      dangerouslyAllowBrowser: true // ปลดล็อกให้รันบน Vite/React ได้
+    },
+
     modelName: settings.model,
-    temperature: 0.2, // ใช้ 0.2 ให้แม่นยำเวลาเรียก Tool
+    temperature: 0.2, // (ตรง Search ใช้ 0.1, Command ใช้ 0 ตามเดิม)
   });
 
   const tools = buildLangChainTools(settings);
