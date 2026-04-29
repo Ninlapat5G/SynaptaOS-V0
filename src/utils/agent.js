@@ -345,18 +345,20 @@ async function responderNode(state) {
     ? formatResultsForResponder(allToolResults, deviceList)
     : 'None — no tools were called'
 
-  const stateSummary = (deviceList || [])
-    .map(d => `- [${d.room}] ${d.name}: ${d.type === 'digital' ? (d.on ? 'ON' : 'OFF') : `${d.value}/${d.max ?? 255}`}`)
-    .join('\n') || 'No devices registered'
+  const stateSummary = allToolResults.length === 0
+    ? (deviceList || [])
+      .map(d => `- [${d.room}] ${d.name} (${d.type}): ${d.type === 'digital' ? (d.on ? 'ON' : 'OFF') : d.value}`)
+      .join('\n') || 'No devices registered'
+    : null
 
   const systemPrompt = `${settings.systemPrompt}
 (Current date & time: ${nowString()} — use this when relevant, do not announce it unprompted.)
 
 [User Info]
-Name: "${settings.profile?.name || 'User'}"
+Name: "${settings.profile?.name || 'User'}"${stateSummary ? `
 
 [Current Home Status]
-${stateSummary}
+${stateSummary}` : ''}
 
 [Tool Results]
 ${toolContext}`
