@@ -1,482 +1,250 @@
-// ── LLM Client ────────────────────────────────────────────────────────────────
-// Wraps fetch calls to any OpenAI-compatible endpoint.
-// Swap endpoint/model by passing different settings — no other code changes needed.
+import { StateGraph, START, END, Annotation } from "@langchain/langgraph";
+import { ChatOpenAI } from "@langchain/openai";
+import { HumanMessage, SystemMessage, AIMessage } from "@langchain/core/messages";
 
-function createLLMClient({ endpoint, apiKey, model }) {
-  const url = `${endpoint}/chat/completions`
-  const headers = {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${apiKey}`,
-    ...(endpoint.includes('openrouter.ai') && {
-      'HTTP-Referer': window.location.origin,
-      'X-Title': 'AIoT Assistant',
-    }),
-  }
-
-  async function chat(messages, options = {}, signal) {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ model, messages, ...options }),
-      signal
-    })
-    if (!res.ok) throw new Error(`LLM ${res.status}: ${await res.text()}`)
-    return res.json()
-  }
-
-  async function stream(messages, options = {}, onChunk, signal) {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ model, messages, stream: true, ...options }),
-      signal
-    })
-    if (!res.ok) throw new Error(`LLM ${res.status}: ${await res.text()}`)
-
-    const reader = res.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop()
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue
-        const data = line.slice(6).trim()
-        if (data === '[DONE]') return
-        try {
-          const json = JSON.parse(data)
-          const delta = json.choices?.[0]?.delta?.content
-          if (delta) onChunk(delta)
-        } catch { }
-      }
-    }
-  }
-
-  return { chat, stream }
-}
-
-// ── Mini Graph Engine ──────────────────────────────────────────────────────────
-// LangGraph-inspired: nodes are async functions (state) => state.
-// Edges are functions (state) => nextNodeName | null (null = END).
-
-function createGraph({ nodes, edges, entry }) {
-  return {
-    async run(initialState) {
-      let state = initialState
-      let current = entry
-      while (current) {
-        const node = nodes[current]
-        if (!node) throw new Error(`Agent graph: node "${current}" not found`)
-        state = await node(state)
-        current = edges[current]?.(state) ?? null
-      }
-      return state
-    },
-  }
-}
-
-// ── Tools Helper ───────────────────────────────────────────────────────────────
-
-function buildTools(settings) {
-  return (settings.skills || [])
-    .filter(sk => sk.enabled)
-    .map(sk => {
-      let parameters = { type: 'object', properties: {} }
-      try { const p = JSON.parse(sk.schema); if (p?.type === 'object') parameters = p } catch { }
-      return { type: 'function', function: { name: sk.name, description: sk.description, parameters } }
-    })
-}
-
-// ── Result Summarizer ─────────────────────────────────────────────────────────
-
-function summarizeResults(allToolResults, deviceList) {
-  return allToolResults.map(r => {
-    const ok = r.result?.error === undefined
-    const icon = ok ? '✅' : '❌'
-
-    switch (r.name) {
-      case 'mqtt_publish': {
-        const d = deviceList?.find(d => d.pubTopic === r.args?.topic || d.subTopic === r.args?.topic)
-        const label = d ? `${d.name} (${d.room})` : r.args?.topic
-        return ok
-          ? `${icon} mqtt_publish → ${label} = ${r.args.payload}`
-          : `${icon} mqtt_publish → ${label} failed: ${r.result.error}`
-      }
-      case 'mqtt_read':
-        return ok
-          ? `${icon} mqtt_read → ${r.result.device} (${r.result.room}) = ${r.result.value}`
-          : `${icon} mqtt_read → ${r.args?.topic} failed: ${r.result.error}`
-      case 'web_search':
-        return ok
-          ? `${icon} web_search [query: "${r.args?.query}"] → ${r.result.summary ?? 'got results'}`
-          : `${icon} web_search failed: ${r.result.error}`
-      case 'os_command':
-        return ok
-          ? `${icon} os_command → ${r.result.summary ?? 'executed'}`
-          : `${icon} os_command failed: ${r.result.error}`
-      default:
-        return `${icon} ${r.name}: ${ok ? 'success' : r.result.error}`
-    }
-  }).join('\n\n---\n\n')
+// ── 0. Helpers ────────────────────────────────────────────────────────────────
+function nowString() {
+  return new Date().toLocaleString('en-GB', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+    hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
+  });
 }
 
 function summarizeDevices(deviceList) {
   return (deviceList || [])
     .map(d => {
       const sub = d.subTopic ? ` | subTopic: ${d.subTopic}` : ''
-      if (d.type === 'analog')
-        return `${d.name} (${d.room}) — analog | state: ${d.value}/${d.max ?? 255} | pubTopic: ${d.pubTopic}${sub}`
-      if (d.type === 'os_terminal')
-        return `${d.name} (${d.room}) — os_terminal (${d.os ?? 'unknown OS'}) | pubTopic: ${d.pubTopic}${sub}`
+      if (d.type === 'analog') return `${d.name} (${d.room}) — analog | state: ${d.value}/${d.max ?? 255} | pubTopic: ${d.pubTopic}${sub}`
+      if (d.type === 'os_terminal') return `${d.name} (${d.room}) — os_terminal (${d.os ?? 'unknown OS'}) | pubTopic: ${d.pubTopic}${sub}`
       return `${d.name} (${d.room}) — digital | state: ${d.on ? 'ON' : 'OFF'} | pubTopic: ${d.pubTopic}${sub}`
-    })
-    .join('\n') || 'No devices registered'
+    }).join('\n') || 'No devices registered';
 }
 
-// ── Responder Tool Context Formatter ─────────────────────────────────────────
-
-function formatResultsForResponder(allToolResults, deviceList) {
-  return allToolResults.map(t => {
-    const ok = t.result?.error === undefined
-    if (!ok) return `[${t.name}] Error: ${t.result.error}`
-
-    switch (t.name) {
-      case 'mqtt_publish': {
-        const d = deviceList?.find(d => d.pubTopic === t.args?.topic || d.subTopic === t.args?.topic)
-        const label = d ? `${d.name} (${d.room})` : t.args?.topic
-        return `[mqtt_publish] Set ${label} = ${t.args?.payload}`
+function buildLangChainTools(settings) {
+  return (settings.skills || [])
+    .filter(sk => sk.enabled)
+    .map(sk => ({
+      type: "function",
+      function: {
+        name: sk.name,
+        description: sk.description,
+        parameters: JSON.parse(sk.schema || "{}")
       }
-      case 'mqtt_read':
-        return `[mqtt_read] ${t.result.device} (${t.result.room}) = ${t.result.value}`
-      case 'web_search':
-        return `[web_search] Query: ${t.args?.query}\n${t.result.summary}`
-      case 'os_command':
-        return t.result.summary
-          ? `[os_command]\n${t.result.summary}`
-          : `[os_command] Command executed (no output)`
-      default:
-        return t.result.summary
-          ? `[${t.name}] ${t.result.summary}`
-          : `[${t.name}] success`
-    }
-  }).join('\n\n')
+    }));
 }
 
-// ── Planner Guard ──────────────────────────────────────────────────────────────
-
-function shouldRunPlanner(toolResults) {
-  return toolResults.some(r => {
-    if (r.result?.error !== undefined) return true
-    if (r.result?.value !== undefined) return true
-    if (r.result?.summary !== undefined) return true
-    return false
+// ── 1. State Definition ──────────────────────────────────────────────────
+const AgentState = Annotation.Root({
+  text: Annotation(),
+  settings: Annotation(),
+  deviceList: Annotation(),
+  apiHistory: Annotation(),
+  allToolResults: Annotation({
+    reducer: (curr, next) => curr.concat(next),
+    default: () => []
+  }),
+  toolCalls: Annotation(),
+  reply: Annotation(),
+  executeTool: Annotation(),
+  onToolCall: Annotation(),
+  onToolResult: Annotation(),
+  onStream: Annotation(),
+  signal: Annotation(),
+  toolRound: Annotation({
+    reducer: (curr, next) => next, // เก็บค่าล่าสุด
+    default: () => 0
   })
-}
+});
 
-// ── Time Helper ───────────────────────────────────────────────────────────────
-
-function nowString() {
-  return new Date().toLocaleString('en-GB', {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-    hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
-  })
-}
-
-// ── Agent Nodes ────────────────────────────────────────────────────────────────
+// ── 2. Nodes ──────────────────────────────────────────────────────────────
 
 async function routerNode(state) {
-  const { text, settings, deviceList, apiHistory = [], signal } = state
-  const llm = createLLMClient(settings)
-  const tools = buildTools(settings)
+  const { settings, text, deviceList, apiHistory, signal, allToolResults } = state;
 
-  const systemPrompt = `You are a smart home tool dispatcher. Output tool calls only — no text, no explanation.
+  const llm = new ChatOpenAI({
+    openAIApiKey: settings.apiKey,
+    configuration: { baseURL: `${settings.endpoint}/chat/completions` },
+    modelName: settings.model,
+    temperature: 0.1,
+  });
+
+  const tools = buildLangChainTools(settings);
+  const boundLlm = tools.length > 0 ? llm.bindTools(tools) : llm;
+
+  const systemPrompt = `You are Synapta smart home tool dispatcher. Output tool calls only.
 Current date & time: ${nowString()}
-
-Return EMPTY (no tool calls) when the message is pure conversation: greetings, farewells, thanks, acknowledgements, questions about you as an AI, or opinions unrelated to any device.
-
-mqtt_read — ONLY for pure sensor devices that have a subTopic but NO pubTopic (e.g. temperature, humidity, door contact sensor).
-  The current state of controllable devices (those with pubTopic) is already shown in the device list — do NOT call mqtt_read for them.
-
-mqtt_publish — call when the user intends to change a device state. Infer intent from context even without exact keywords.
-  - Direct intents: "turn on the lamp", "ปิดไฟ", "dim to 50%"
-  - Indirect intents: "it's too dark" (implies turn on light), "I'm freezing" (implies turn on heater/turn off AC)
-  Rule: use the EXACT pubTopic from the device list. Digital payload = "true"/"false". Analog payload = number string 0–max.
-
-os_command — call when the user wants to run a command on a remote machine AND an os_terminal device exists.
-  Use the OS shown in the device list (e.g. "os_terminal (windows)") as the "os" argument — do NOT guess.
-  wait_output: true for commands that return output (ls, dir, cat). false for fire-and-forget (shutdown, open app).
-  IMPORTANT: If the command requires opening a URL that is not yet known (e.g. a song, video, website),
-  call web_search FIRST to find the real URL. Do NOT call os_command in the same round — the planner will follow up with the actual URL.
-
-web_search — call when the user explicitly needs current external information that cannot be answered from context.
-  e.g. "search for...", "what's the weather?", "latest news about..."
-  Do NOT call if the answer is already known or the question is conversational.
-
-Available devices:
-${summarizeDevices(deviceList)}`
-
-  let data
-  try {
-    data = await llm.chat(
-      [{ role: 'system', content: systemPrompt }, ...apiHistory, { role: 'user', content: text }],
-      { ...(tools.length ? { tools, tool_choice: 'auto' } : {}), temperature: 0.1, max_tokens: 1024 },
-      signal
-    )
-  } catch (err) {
-    if (err.name === 'AbortError') throw err
-    throw new Error(`Router: ${err.message}`)
-  }
-
-  const msg = data?.choices?.[0]?.message
-  if (!msg) throw new Error('Router returned no response from API')
-
-  return { ...state, toolCalls: msg.tool_calls || [] }
-}
-
-async function toolExecutorNode(state) {
-  const { toolCalls, executeTool, onToolCall, onToolResult, settings, apiHistory = [], signal } = state
-  const round = (state.toolRound || 0) + 1   // 1-indexed label for UI
-
-  const toolResults = await Promise.all(
-    toolCalls.map(async tc => {
-      const name = tc.function.name
-      let args = {}
-      try { args = JSON.parse(tc.function.arguments || '{}') } catch { args = tc.function.arguments }
-
-      if (name === 'web_search' && args.query) {
-        args.query = await generateSearchQuery({ settings, query: args.query, apiHistory, signal })
-      }
-
-      onToolCall?.(name, args, round)
-
-      let result
-      try {
-        result = await executeTool(name, args)
-      } catch (err) {
-        console.error(`[Agent] Tool execution failed for ${name}:`, err)
-        result = { error: err.message || 'Execution failed' }
-      }
-
-      onToolResult?.(name, args, result, round)
-      return { name, args, result }
-    })
-  )
-
-  return {
-    ...state,
-    toolResults,
-    allToolResults: [...(state.allToolResults || []), ...toolResults],
-    toolRound: (state.toolRound || 0) + 1,
-  }
-}
-
-async function plannerNode(state) {
-  const { text, settings, deviceList, allToolResults, toolRound, apiHistory = [], signal } = state
-  const llm = createLLMClient(settings)
-
-  const tools = buildTools(settings)
-
-  const systemPrompt = `You are a completion checker. Output tool calls only — no text.
-
-User request: "${text}"
-
-Executed so far:
-${summarizeResults(allToolResults, deviceList)}
 
 Available devices:
 ${summarizeDevices(deviceList)}
 
-Check: does every target in the user's intent have a successful result above?
-- All targets done → return empty (no tool calls).
-- A target is missing → call the tool for that specific target only.
-- A call failed → retry once with corrected arguments if fixable.
+Return EMPTY (no tool calls) when the message is pure conversation.`;
 
-Tool chaining rule:
-- If the results above contain a URL from web_search, and the user's goal is to open or play something, you MUST call "os_command" to execute it immediately.
-- Example instruction: "open this URL in the browser: https://www.youtube.com/watch?v=xxxxx"
-- Do NOT write a vague instruction. Always include the actual URL in the command.`
+  const messages = [
+    new SystemMessage(systemPrompt),
+    ...apiHistory.map(m => m.role === 'user' ? new HumanMessage(m.content) : new AIMessage(m.content)),
+  ];
 
-  let data
-  try {
-    data = await llm.chat(
-      [{ role: 'system', content: systemPrompt }, { role: 'user', content: text }],
-      { ...(tools.length ? { tools, tool_choice: 'auto' } : {}), temperature: 0.1, max_tokens: 512 },
-      signal
-    )
-  } catch (err) {
-    if (err.name === 'AbortError') throw err
-    throw new Error(`Planner: ${err.message}`)
+  // ถ้านี่คือการวนลูป (มีผลลัพธ์ tool ก่อนหน้า) ให้ใส่ผลลัพธ์เข้าไปให้มันพิจารณาด้วย
+  if (allToolResults.length > 0) {
+    const toolSummary = allToolResults.map(r => `[${r.name}] ${JSON.stringify(r.result)}`).join('\n');
+    messages.push(new HumanMessage(`${text}\n\n[Previous Tool Results]:\n${toolSummary}\n\nDo we need to call any more tools to complete the user's request? If yes, call them. If no, just output text to finish.`));
+  } else {
+    messages.push(new HumanMessage(text));
   }
 
-  const rawToolCalls = data?.choices?.[0]?.message?.tool_calls || []
+  const response = await boundLlm.invoke(messages, { signal });
 
-  // ✨ Argument-Level Masking (ป้องกันลูปแบบ 100% สำหรับทุก Tools)
-  const successfulCalls = allToolResults.filter(r => !r.result?.error)
+  return {
+    toolCalls: response.tool_calls || []
+  };
+}
 
-  const filteredToolCalls = rawToolCalls.filter(newCall => {
-    let newArgs = {}
-    try { newArgs = JSON.parse(newCall.function.arguments || '{}') } catch { }
+async function toolExecutorNode(state) {
+  const { toolCalls, executeTool, onToolCall, onToolResult, toolRound } = state;
+  const currentRound = toolRound + 1;
+  const results = [];
 
-    const isDuplicate = successfulCalls.some(pastCall => {
-      if (pastCall.name !== newCall.function.name) return false
+  for (const tc of toolCalls) {
+    onToolCall?.(tc.name, tc.args, currentRound);
+    let result;
+    try {
+      result = await executeTool(tc.name, tc.args);
+    } catch (err) {
+      result = { error: err.message || 'Execution failed' };
+    }
+    onToolResult?.(tc.name, tc.args, result, currentRound);
+    results.push({ name: tc.name, args: tc.args, result });
+  }
 
-      const pastKeys = Object.keys(pastCall.args || {})
-      const newKeys = Object.keys(newArgs)
-
-      if (pastKeys.length !== newKeys.length) return false
-      return pastKeys.every(k => String(pastCall.args[k]) === String(newArgs[k]))
-    })
-
-    return !isDuplicate
-  })
-
-  return { ...state, toolCalls: filteredToolCalls }
+  return { allToolResults: results, toolCalls: [], toolRound: currentRound };
 }
 
 async function responderNode(state) {
-  const { text, settings, apiHistory, allToolResults = [], deviceList, onStream, signal } = state
-  const llm = createLLMClient(settings)
+  const { settings, text, allToolResults, apiHistory, onStream, signal, deviceList } = state;
+
+  const llm = new ChatOpenAI({
+    openAIApiKey: settings.apiKey,
+    configuration: { baseURL: `${settings.endpoint}/chat/completions` },
+    modelName: settings.model,
+    temperature: 0.6,
+  });
 
   const stateSummary = (deviceList || [])
     .map(d => `- [${d.room}] ${d.name}: ${d.type === 'digital' ? (d.on ? 'ON' : 'OFF') : `${d.value}/${d.max ?? 255}`}`)
-    .join('\n') || 'No devices registered'
+    .join('\n') || 'No devices registered';
 
   const systemPrompt = `${settings.systemPrompt}
-(Current date & time: ${nowString()} — use this when relevant, do not announce it unprompted.)
-
-[User Info]
-Name: "${settings.profile?.name || 'User'}"
-
+(Current date & time: ${nowString()})
 [Current Home Status]
-${stateSummary}`
+${stateSummary}
 
-  const toolContext = allToolResults.length
-    ? formatResultsForResponder(allToolResults, deviceList)
-    : null
+[IMPORTANT GUARDRAILS]
+- If the user asks to control a device or run a command, and the [Tool Results] indicates NO tools were executed or a tool failed, you MUST NOT pretend the action was successful. Apologize and state the failure.`;
 
   const messages = [
-    { role: 'system', content: systemPrompt },
-    ...apiHistory,
-    { role: 'user', content: text },
-    ...(toolContext ? [{ role: 'assistant', content: `[Tool Results]\n${toolContext}` }] : []),
-  ]
+    new SystemMessage(systemPrompt),
+    ...apiHistory.map(m => m.role === 'user' ? new HumanMessage(m.content) : new AIMessage(m.content)),
+  ];
 
-  let reply = ''
+  if (allToolResults.length > 0) {
+    const toolSummary = allToolResults.map(r => `[${r.name}] ${JSON.stringify(r.result)}`).join('\n');
+    messages.push(new HumanMessage(`${text}\n\n[System: Tool Results]\n${toolSummary}`));
+  } else {
+    messages.push(new HumanMessage(`${text}\n\n[System: No tools were executed for this request.]`));
+  }
 
-  await llm.stream(
-    messages,
-    { temperature: 0.6, frequency_penalty: 0.3, max_tokens: 4096 },
-    chunk => { reply += chunk; onStream?.(chunk) },
-    signal
-  )
+  // ✨ จัดการ Streaming ให้ส่งกลับไปที่หน้า UI ทีละตัวอักษร
+  let replyText = "";
+  const stream = await llm.stream(messages, { signal });
+  for await (const chunk of stream) {
+    if (chunk.content) {
+      replyText += chunk.content;
+      onStream?.(chunk.content);
+    }
+  }
 
-  return { ...state, reply }
+  return { reply: replyText };
 }
 
-// ── Agent Graph ────────────────────────────────────────────────────────────────
+// ── 3. Graph Construction ────────────────────────────────────────────────
+const workflow = new StateGraph(AgentState)
+  .addNode("router", routerNode)
+  .addNode("toolExecutor", toolExecutorNode)
+  .addNode("responder", responderNode)
+  .addEdge(START, "router")
+  .addConditionalEdges("router", (state) => {
+    return state.toolCalls?.length > 0 ? "toolExecutor" : "responder";
+  })
+  .addEdge("toolExecutor", "router") // ✨ ReAct Loop
+  .addEdge("responder", END);
 
-const agentGraph = createGraph({
-  nodes: {
-    router: routerNode,
-    toolExecutor: toolExecutorNode,
-    planner: plannerNode,
-    responder: responderNode,
-  },
-  edges: {
-    router: state => state.toolCalls.length > 0 ? 'toolExecutor' : 'responder',
-    // Skip planner if no tool returned meaningful data to reason about
-    toolExecutor: state => shouldRunPlanner(state.toolResults) ? 'planner' : 'responder',
-    planner: state => (state.toolCalls.length > 0 && state.toolRound < 2) ? 'toolExecutor' : 'responder',
-  },
-  entry: 'router',
-})
+const compiledGraph = workflow.compile();
 
-// ── Public API ─────────────────────────────────────────────────────────────────
+// ── 4. Public API ────────────────────────────────────────────────────────
+export const runAgent = async (params) => {
+  // รัน Graph
+  const finalState = await compiledGraph.invoke({
+    ...params,
+    allToolResults: [],
+    toolRound: 0,
+    toolCalls: []
+  });
+  return { reply: finalState.reply, allToolResults: finalState.allToolResults };
+};
 
-export const runAgent = params => agentGraph.run({
-  toolCalls: [],
-  toolResults: [],
-  allToolResults: [],
-  toolRound: 0,
-  ...params,
-})
-
-// ── Sub-agents ────────────────────────────────────────────────────────────────
-
-const OS_COMMAND_SYSTEM = `You are a terminal command translator for remote machine control.
-Given a natural-language instruction and a target OS, output the exact terminal command to execute.
-
-Output rules:
-- Return ONLY the raw command string — no explanation, no markdown, no code fences, no quotes
-- Single command per response (pipelines allowed only when necessary)
-- NEVER invent placeholder values — use only real values from the instruction
-- If asked to open a video/song but no URL is in the instruction → use a YouTube search URL instead:
-  windows: start https://www.youtube.com/results?search_query=song+name
-  mac:     open  https://www.youtube.com/results?search_query=song+name
-  linux:   xdg-open https://www.youtube.com/results?search_query=song+name
-
-Command syntax by OS:
-- windows → Command Prompt (cmd.exe); use PowerShell only if explicitly requested
-- mac     → bash / zsh
-- linux   → POSIX sh / bash
-
-Safety:
-- If the instruction would destroy system files, format drives, or wipe data → respond with exactly: UNSAFE`
+// ── 5. Sub-agents (ยังต้องใช้ใน agentSkills.js) ─────────────────────────
 
 export async function generateOsCommand({ settings, instruction, os, signal }) {
-  const llm = createLLMClient(settings)
-  let data
-  try {
-    data = await llm.chat(
-      [
-        { role: 'system', content: `${OS_COMMAND_SYSTEM}\n\nTarget OS: ${os}` },
-        { role: 'user', content: instruction },
-      ],
-      { temperature: 0, max_tokens: 256 },
-      signal
-    )
-  } catch (err) {
-    if (err.name === 'AbortError') throw err
-    throw new Error('OS command agent ไม่ตอบสนอง')
-  }
-  const cmd = data?.choices?.[0]?.message?.content?.trim() ?? ''
-  if (!cmd) throw new Error('ไม่สามารถสร้างคำสั่งได้')
-  if (cmd === 'UNSAFE') throw new Error('คำสั่งนี้ไม่ปลอดภัย — ปฏิเสธการรัน')
-  return cmd
+  const llm = new ChatOpenAI({
+    openAIApiKey: settings.apiKey,
+    configuration: { baseURL: `${settings.endpoint}/chat/completions` },
+    modelName: settings.model,
+    temperature: 0,
+  });
+
+  const OS_COMMAND_SYSTEM = `You are a terminal command translator for remote machine control.
+Given a natural-language instruction and a target OS, output the exact terminal command to execute.
+Output ONLY the raw command string — no explanation, no markdown.
+If unsafe, output exactly: UNSAFE`;
+
+  const messages = [
+    new SystemMessage(`${OS_COMMAND_SYSTEM}\n\nTarget OS: ${os}`),
+    new HumanMessage(instruction)
+  ];
+
+  const response = await llm.invoke(messages, { signal });
+  const cmd = response.content.trim();
+
+  if (!cmd) throw new Error('ไม่สามารถสร้างคำสั่งได้');
+  if (cmd === 'UNSAFE') throw new Error('คำสั่งนี้ไม่ปลอดภัย — ปฏิเสธการรัน');
+  return cmd;
 }
 
-const SEARCH_QUERY_SYSTEM = `You are a Search Context Optimizer.
-Your task is to analyze the conversation history and the user's intended search query to generate the most precise Google search keyword.
-
-Rules:
-- Output ONLY the raw search query string. No explanation, no quotes.
-- Resolve pronouns (e.g., "หาข้อมูลเรื่องนั้นต่อ", "ขอเพลงที่คุยกันเมื่อกี้") by looking at the history.
-- Extract only the essential keywords needed for a good search engine result. 
-- MUST remove conversational filler words like "หาเพลง", "เปิด", "search for", "ขอวิดีโอ" and output ONLY the core entity/topic.
-- If the original query is already perfect and clear, output it exactly as is.`
-
 export async function generateSearchQuery({ settings, query, apiHistory, signal }) {
-  const llm = createLLMClient(settings)
-  const recentHistory = (apiHistory || []).slice(-4)
+  const llm = new ChatOpenAI({
+    openAIApiKey: settings.apiKey,
+    configuration: { baseURL: `${settings.endpoint}/chat/completions` },
+    modelName: settings.model,
+    temperature: 0.1,
+  });
+
+  const SEARCH_QUERY_SYSTEM = `You are a Search Context Optimizer.
+Output ONLY the raw search query string based on the user intent. Remove conversational fillers.`;
+
+  const recentHistory = (apiHistory || []).slice(-4).map(m =>
+    m.role === 'user' ? new HumanMessage(m.content) : new AIMessage(m.content)
+  );
+
+  const messages = [
+    new SystemMessage(SEARCH_QUERY_SYSTEM),
+    ...recentHistory,
+    new HumanMessage(`Router intended query: "${query}"\nPlease output the optimized search query:`)
+  ];
 
   try {
-    const data = await llm.chat(
-      [
-        { role: 'system', content: SEARCH_QUERY_SYSTEM },
-        ...recentHistory,
-        { role: 'user', content: `Router intended query: "${query}"\nPlease output the optimized search query:` },
-      ],
-      { temperature: 0.1, max_tokens: 128 },
-      signal
-    )
-    const optimized = data?.choices?.[0]?.message?.content?.trim()
-    return optimized || query
+    const response = await llm.invoke(messages, { signal });
+    return response.content.trim() || query;
   } catch (err) {
-    console.warn('[Agent] Search query optimization failed, falling back to original:', err)
-    return query
+    return query;
   }
 }
