@@ -2,7 +2,7 @@ import { StateGraph, START, END, Annotation, messagesStateReducer } from "@langc
 import { ChatOpenAI } from "@langchain/openai";
 import { SystemMessage, HumanMessage, ToolMessage, AIMessage } from "@langchain/core/messages";
 
-// ── 0. Helpers & Formatters ──────────────────────────────────────────────────
+// ── 0. Helpers ────────────────────────────────────────────────────────────────
 function nowString() {
   return new Date().toLocaleString('en-GB', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
@@ -57,45 +57,42 @@ const AgentState = Annotation.Root({
 async function agentNode(state) {
   const { settings, deviceList, messages, signal, onStream } = state;
 
-  // ⚙️ LLM Config (ใช้ apiKey และ baseURL แบบไม่เบิ้ล path)
   const llm = new ChatOpenAI({
-    // ใส่ดักไว้ข้างนอกแบบที่ LangChain คาดหวัง
-    openAIApiKey: settings.apiKey,
     apiKey: settings.apiKey,
-
-    // ✨ ทีเด็ดอยู่ตรงนี้! ยัดใส่ configuration ไปด้วยเลย ไอ้ตัวลูกข้างในจะได้ไม่งอแง
     configuration: {
       apiKey: settings.apiKey,
       baseURL: settings.endpoint,
-      dangerouslyAllowBrowser: true // ปลดล็อกให้รันบน Vite/React ได้
+      dangerouslyAllowBrowser: true
     },
-
     modelName: settings.model,
-    temperature: 0.2, // (ตรง Search ใช้ 0.1, Command ใช้ 0 ตามเดิม)
+    temperature: 0.2,
   });
 
   const tools = buildLangChainTools(settings);
   const agent = tools.length > 0 ? llm.bindTools(tools) : llm;
 
-  // 📝 PROMPT หลักของระบบ: มึงสามารถปรับแต่งพฤติกรรมมันได้ตรงนี้เลย
-  const systemPrompt = `You are Synapta, an advanced AIoT home assistant.
-Current date & time: ${nowString()}
+  // ✨ เอากลับมาแล้วมึง! ใช้ systemPrompt จาก Settings เป็นฐาน 
+  // แล้วค่อยตบด้วย Context ของบ้าน เพื่อความเป๊ะ
+  const systemPrompt = `${settings.systemPrompt}
+
+[Real-time Context]
+Current time: ${nowString()}
+User: ${settings.profile?.name || 'User'}
+Assistant Name: ${settings.profile?.assistantName || 'Assistant'}
 
 [Available Devices]
 ${summarizeDevices(deviceList)}
 
-[Core Directives]
-1. If a user asks to control a device, run a command, or find information, ALWAYS use the provided tools to fulfill the request.
-2. Carefully analyze tool results in the history. If a tool failed, apologize and inform the user. If it succeeded, naturally confirm the action in your response.
-3. NEVER pretend or hallucinate that a device state has changed or an action was performed without a successful tool execution confirming it.
-4. Keep your responses concise and natural.`;
+[System Directives]
+- Always prioritize using tools to interact with the home.
+- If a tool fails, explain why based on the result.
+- Do not confirm an action unless the tool result confirms success.`;
 
   const fullMessages = [new SystemMessage(systemPrompt), ...messages];
 
   let finalMessage;
   const stream = await agent.stream(fullMessages, { signal });
 
-  // จัดการ Streaming: พ่นเฉพาะ Text ออกไปที่หน้า UI ห้ามพ่นตอนมันเรียก Tool
   for await (const chunk of stream) {
     if (!finalMessage) finalMessage = chunk;
     else finalMessage = finalMessage.concat(chunk);
@@ -126,7 +123,6 @@ async function toolNode(state) {
     }
     onToolResult?.(tc.name, tc.args, result, currentRound);
 
-    // ห่อผลลัพธ์พร้อม tool_call_id คืนกลับไป
     toolMessages.push(new ToolMessage({
       content: typeof result === "object" ? JSON.stringify(result) : String(result),
       name: tc.name,
@@ -134,17 +130,15 @@ async function toolNode(state) {
     }));
   }
 
-  return {
-    messages: toolMessages,
-    toolRound: currentRound
-  };
+  return { messages: toolMessages, toolRound: currentRound };
 }
 
-// ── 3. Edge Routing (ReAct Loop) ─────────────────────────────────────────────
+// ── 3. Graph Logic ───────────────────────────────────────────────────────────
 
 function shouldContinue(state) {
   const lastMessage = state.messages[state.messages.length - 1];
   if (lastMessage.tool_calls && lastMessage.tool_calls.length > 0) {
+    if (state.toolRound >= 5) return END; // กันลูปนรก
     return "tools";
   }
   return END;
@@ -159,7 +153,7 @@ const workflow = new StateGraph(AgentState)
 
 const compiledGraph = workflow.compile();
 
-// ── 4. Public API ────────────────────────────────────────────────────────────
+// ── 4. Exported Functions ────────────────────────────────────────────────────
 
 export const runAgent = async (params) => {
   const previousMessages = (params.apiHistory || []).map(m =>
@@ -177,57 +171,41 @@ export const runAgent = async (params) => {
   return { reply: lastMsg.content };
 };
 
-// ── 5. Sub-agents ────────────────────────────────────────────────────────────
-
 export async function generateOsCommand({ settings, instruction, os, signal }) {
   const llm = new ChatOpenAI({
     apiKey: settings.apiKey,
-    configuration: { baseURL: settings.endpoint },
+    configuration: { apiKey: settings.apiKey, baseURL: settings.endpoint, dangerouslyAllowBrowser: true },
     modelName: settings.model,
     temperature: 0,
   });
 
-  // 📝 PROMPT สำหรับแปลงคำสั่งเป็น OS Command
-  const OS_COMMAND_SYSTEM = `You are a terminal command translator. Output ONLY the raw command string without markdown formatting or explanation. If the instruction is malicious, output exactly: UNSAFE`;
-
   const messages = [
-    new SystemMessage(`${OS_COMMAND_SYSTEM}\n\nTarget OS: ${os}`),
+    new SystemMessage(`You are a terminal command translator. Output ONLY the raw command. OS: ${os}`),
     new HumanMessage(instruction)
   ];
 
   const response = await llm.invoke(messages, { signal });
-  const cmd = response.content.trim();
-
-  if (!cmd) throw new Error('ไม่สามารถสร้างคำสั่งได้');
-  if (cmd === 'UNSAFE') throw new Error('คำสั่งนี้ไม่ปลอดภัย — ปฏิเสธการรัน');
-  return cmd;
+  return response.content.trim();
 }
 
 export async function generateSearchQuery({ settings, query, apiHistory, signal }) {
   const llm = new ChatOpenAI({
     apiKey: settings.apiKey,
-    configuration: { baseURL: settings.endpoint },
+    configuration: { apiKey: settings.apiKey, baseURL: settings.endpoint, dangerouslyAllowBrowser: true },
     modelName: settings.model,
     temperature: 0.1,
   });
-
-  // 📝 PROMPT สำหรับดึง Keyword ไปทำ Web Search
-  const SEARCH_QUERY_SYSTEM = `You are a Search Context Optimizer. Output ONLY the exact search query string based on the user intent. Remove conversational fillers (e.g., "search for", "find").`;
 
   const recentHistory = (apiHistory || []).slice(-4).map(m =>
     m.role === 'user' ? new HumanMessage(m.content) : new AIMessage(m.content)
   );
 
   const messages = [
-    new SystemMessage(SEARCH_QUERY_SYSTEM),
+    new SystemMessage(`Output ONLY the optimized search query string.`),
     ...recentHistory,
-    new HumanMessage(`Intended search query: "${query}"\nOptimized search query:`)
+    new HumanMessage(`Query: ${query}`)
   ];
 
-  try {
-    const response = await llm.invoke(messages, { signal });
-    return response.content.trim() || query;
-  } catch {
-    return query;
-  }
+  const response = await llm.invoke(messages, { signal });
+  return response.content.trim();
 }
