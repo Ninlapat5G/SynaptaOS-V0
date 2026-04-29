@@ -57,6 +57,14 @@ const AgentState = Annotation.Root({
 async function agentNode(state) {
   const { settings, deviceList, messages, signal, onStream, toolRound } = state;
 
+  // os_terminal devices are only visible to the agent when os_command skill is enabled.
+  // If the skill is off, hide them entirely — the agent won't know they exist
+  // and therefore won't try to interact with them via any tool.
+  const osCommandEnabled = (settings.skills || []).some(s => s.name === 'os_command' && s.enabled)
+  const visibleDevices = osCommandEnabled
+    ? deviceList
+    : (deviceList || []).filter(d => d.type !== 'os_terminal')
+
   const llm = new ChatOpenAI({
     apiKey: settings.apiKey,
     configuration: {
@@ -79,7 +87,7 @@ async function agentNode(state) {
   Time: ${nowString()} | User: ${settings.profile?.name || 'User'}
 
   [AVAILABLE DEVICES IN HOME]
-  ${summarizeDevices(deviceList)}
+  ${summarizeDevices(visibleDevices)}
 
   [IRONCLAD RULES]
   1. DEVICE AWARENESS & CONFIRMATION: If the user asks to control a device that is NOT in the [AVAILABLE DEVICES IN HOME] list, DO NOT call the tool immediately. 
