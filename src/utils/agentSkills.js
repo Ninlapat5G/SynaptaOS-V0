@@ -23,7 +23,6 @@ async function mqttPublish(args, ctx) {
     d => d.pubTopic === topic || d.pubTopic?.endsWith('/' + topic)
   )
 
-  // ✨ ปลดล็อคความล้ำ: ถ้าหาไม่เจอในลิสต์ ให้ถือว่าเป็น Raw Topic ยิงสดไปเลย!
   let finalTopic = topic;
   let isRaw = false;
 

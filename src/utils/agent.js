@@ -75,7 +75,6 @@ async function agentNode(state) {
     settings.systemPrompt || "You are a helpful smart home assistant."
   );
 
-  // ✨ กฎใหม่โคตรล้ำ: ทักท้วงก่อน ถ้ามึงดื้อก็จะยอมยิงให้
   const contextMessage = new SystemMessage(`[SYSTEM ENVIRONMENT]
   Time: ${nowString()} | User: ${settings.profile?.name || 'User'}
 
@@ -99,7 +98,6 @@ async function agentNode(state) {
     if (!finalMessage) finalMessage = chunk;
     else finalMessage = finalMessage.concat(chunk);
 
-    // ✨ สตรีมเฉพาะเนื้อหาที่คุยกับ User ตัดขยะ Tool Chunk ทิ้ง
     if (chunk.content && !chunk.tool_call_chunks?.length) {
       onStream?.(chunk.content);
     }
@@ -115,7 +113,6 @@ async function toolNode(state) {
   const lastMessage = messages[messages.length - 1];
   const toolCalls = lastMessage.tool_calls || [];
 
-  // ✨ รัน Tool แบบ Parallel โหลดพร้อมกันรัวๆ
   const promises = toolCalls.map(async (tc) => {
     onToolCall?.(tc.name, tc.args, currentRound);
     let result;
@@ -143,7 +140,6 @@ async function toolNode(state) {
 function shouldContinue(state) {
   const lastMessage = state.messages[state.messages.length - 1];
   if (lastMessage.tool_calls && lastMessage.tool_calls.length > 0) {
-    // ✨ ลิมิตลูปไว้แค่ 3 รอบ กันมันคิดวนจนแอปค้าง
     if (state.toolRound >= 3) {
       console.warn("[Agent] Reached max tool rounds. Forcing exit.");
       return END;
@@ -184,7 +180,6 @@ export const runAgent = async (params) => {
 
   const lastMsg = finalState.messages[finalState.messages.length - 1];
 
-  // ✨ ดักกรณีจบกราฟแล้วไม่มี Text มีแต่ Tool เพื่อให้ UI ไม่เอ๋อ
   let finalReply = lastMsg.content;
   if (!finalReply && lastMsg.tool_calls?.length > 0) {
     finalReply = "ขออภัยค่ะ ระบบพยายามดำเนินการหลายครั้งแต่ไม่สำเร็จ ลองสั่งใหม่อีกครั้งนะคะ 🥺";

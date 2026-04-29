@@ -23,7 +23,7 @@
 │         LangGraph ReAct Loop             │
 │                                          │
 │  ┌─────────────────────┐                 │
-│  │   [agent]  temp=0.2 │◄────────┐       │
+│  │   [agent]            │◄────────┐       │
 │  │  รู้เวลาปัจจุบัน    │         │       │
 │  │  รู้ device list    │         │       │
 │  │  เลือก tool หรือ   │         │       │
@@ -33,8 +33,8 @@
 │    ┌────┴─────────────────┐      │       │
 │    │  มี tool calls       │      │       │
 │    │         ▼            │  ────┘       │
-│    │  [tools]             │  ↑ loop      │
-│    │  รัน parallel        │  (max 3 รอบ) │
+│    │  [tools]             │  ↑ ReAct     │
+│    │  รัน parallel        │              │
 │    │  Promise.all         │              │
 │    │  ✅ ToolMessage ส่ง  │              │
 │    │  กลับให้ agent       │              │
@@ -95,7 +95,7 @@ src/
     ├── Nav.jsx
     ├── DeviceCard.jsx        # digital / analog / os_terminal device types
     ├── ChatPage.jsx          # AI Chat + Voice input + Stop button
-    ├── SettingsPage.jsx      # 7 sections + QR export/import
+    ├── SettingsPage.jsx      # 7 sections
     └── TweaksPanel.jsx       # Live theme editor
 
 build_com_agent/
@@ -128,6 +128,14 @@ npm run build    # production build
 | OpenAI | `https://api.openai.com/v1` | — |
 | Ollama (local) | `http://localhost:11434/v1` | ไม่ต้องใช้ internet |
 
+**Typhoon AI — รายการ model แนะนำ (ณ เมษายน 2025):**
+
+| Model ID | Context | หมายเหตุ |
+|---|---|---|
+| `typhoon-v2.5-30b-a3b-instruct` | 128K | **ค่าเริ่มต้น** · flagship · เก่งทั้ง tool use และ Thai |
+| `typhoon-v2.1-12b-instruct` | 56K | เล็กกว่า · เร็วกว่า · ประหยัด token |
+| `typhoon-v2-r1-70b-instruct` | 128K | reasoning model · เหมาะกับคำสั่งซับซ้อน |
+
 ---
 
 ## ฟีเจอร์ระบบ
@@ -148,7 +156,7 @@ npm run build    # production build
 
 - พิมพ์หรือกดไมค์พูด (ภาษาไทย/อังกฤษ)
 - ปุ่มหยุดระหว่าง AI กำลังคิดหรือรัน tool
-- เก็บประวัติแชท **10 ข้อความล่าสุด** เพื่อประหยัด token
+- ประวัติแชทถูก trim ด้วย **token budget 4,000 tokens** (character estimate) ก่อนส่ง LLM — ไม่ overflow แม้ web_search คืนผลยาว
 
 | ตัวอย่างคำสั่ง | ผลลัพธ์ |
 |---|---|
@@ -181,7 +189,7 @@ npm run build    # production build
 - ได้รับ device list (human-readable summary ไม่ใช่ raw JSON) + skills ที่เปิด + ประวัติสนทนา
 - รองรับคำสั่ง **ตรง** ("เปิดไฟ") และ **อ้อมค้อม** ("มืดมากเลย" → เปิดไฟ)
 - **IRONCLAD RULE — Device Awareness**: ถ้าคำสั่งชี้ไปที่อุปกรณ์ที่ไม่มีในลิสต์ จะ**ไม่ publish ทันที** — จะแจ้ง user ก่อนและขอให้ยืนยัน + ระบุ MQTT topic เองก่อน
-- `temperature=0.2` · stream คำตอบทีละ token ขณะที่ไม่มี tool call
+- `temperature=0.1` (round 0 — tool selection) · `temperature=0.5` (round ถัดไป — synthesis/response) · stream ทีละ token
 
 ### Tools Node
 
