@@ -341,10 +341,6 @@ async function responderNode(state) {
   const { text, settings, apiHistory, allToolResults = [], deviceList, onStream, signal } = state
   const llm = createLLMClient(settings)
 
-  const toolContext = allToolResults.length
-    ? formatResultsForResponder(allToolResults, deviceList)
-    : 'None — no tools were called'
-
   const stateSummary = (deviceList || [])
     .map(d => `- [${d.room}] ${d.name}: ${d.type === 'digital' ? (d.on ? 'ON' : 'OFF') : `${d.value}/${d.max ?? 255}`}`)
     .join('\n') || 'No devices registered'
@@ -356,15 +352,23 @@ async function responderNode(state) {
 Name: "${settings.profile?.name || 'User'}"
 
 [Current Home Status]
-${stateSummary}
+${stateSummary}`
 
-[Tool Results]
-${toolContext}`
+  const toolContext = allToolResults.length
+    ? formatResultsForResponder(allToolResults, deviceList)
+    : null
+
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    ...apiHistory,
+    { role: 'user', content: text },
+    ...(toolContext ? [{ role: 'assistant', content: `[Tool Results]\n${toolContext}` }] : []),
+  ]
 
   let reply = ''
 
   await llm.stream(
-    [{ role: 'system', content: systemPrompt }, ...apiHistory, { role: 'user', content: text }],
+    messages,
     { temperature: 0.6, frequency_penalty: 0.3, max_tokens: 4096 },
     chunk => { reply += chunk; onStream?.(chunk) },
     signal
