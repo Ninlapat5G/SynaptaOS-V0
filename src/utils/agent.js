@@ -83,7 +83,7 @@ function createGraph({ nodes, edges, entry }) {
 
 function buildTools(settings) {
   return (settings.skills || [])
-    .filter(sk => sk.enabled)
+    .filter(sk => sk.enabled && sk.name !== 'mqtt_read')
     .map(sk => {
       let parameters = { type: 'object', properties: {} }
       try { const p = JSON.parse(sk.schema); if (p?.type === 'object') parameters = p } catch { }
