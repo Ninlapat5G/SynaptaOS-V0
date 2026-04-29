@@ -126,11 +126,12 @@ function summarizeResults(allToolResults, deviceList) {
 function summarizeDevices(deviceList) {
   return (deviceList || [])
     .map(d => {
+      const sub = d.subTopic ? ` | subTopic: ${d.subTopic}` : ''
       if (d.type === 'analog')
-        return `${d.name} (${d.room}) — analog, max ${d.max ?? 255}, pubTopic: ${d.pubTopic}`
+        return `${d.name} (${d.room}) — analog, max ${d.max ?? 255} | pubTopic: ${d.pubTopic}${sub}`
       if (d.type === 'os_terminal')
-        return `${d.name} (${d.room}) — os_terminal (${d.os ?? 'unknown OS'}), pubTopic: ${d.pubTopic}`
-      return `${d.name} (${d.room}) — digital, pubTopic: ${d.pubTopic}`
+        return `${d.name} (${d.room}) — os_terminal (${d.os ?? 'unknown OS'}) | pubTopic: ${d.pubTopic}${sub}`
+      return `${d.name} (${d.room}) — digital | pubTopic: ${d.pubTopic}${sub}`
     })
     .join('\n') || 'No devices registered'
 }
@@ -218,7 +219,7 @@ ${summarizeDevices(deviceList)}`
   try {
     data = await llm.chat(
       [{ role: 'system', content: systemPrompt }, ...apiHistory, { role: 'user', content: text }],
-      { ...(tools.length ? { tools, tool_choice: 'auto' } : {}), temperature: 0.1, max_tokens: 4096 },
+      { ...(tools.length ? { tools, tool_choice: 'auto' } : {}), temperature: 0.1, frequency_penalty: 0.3, max_tokens: 4096 },
       signal
     )
   } catch (err) {
@@ -299,7 +300,7 @@ Tool chaining rule:
   try {
     data = await llm.chat(
       [{ role: 'system', content: systemPrompt }, { role: 'user', content: text }],
-      { ...(tools.length ? { tools, tool_choice: 'auto' } : {}), temperature: 0.1, max_tokens: 1024 },
+      { ...(tools.length ? { tools, tool_choice: 'auto' } : {}), temperature: 0.1, frequency_penalty: 0.3, max_tokens: 1024 },
       signal
     )
   } catch (err) {
@@ -362,7 +363,7 @@ ${toolContext}`
 
   await llm.stream(
     [{ role: 'system', content: systemPrompt }, ...apiHistory, { role: 'user', content: text }],
-    { temperature: 0.7, max_tokens: 4096 },
+    { temperature: 0.6, frequency_penalty: 0.3, max_tokens: 4096 },
     chunk => { reply += chunk; onStream?.(chunk) },
     signal
   )
