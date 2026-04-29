@@ -57,13 +57,29 @@ const AgentState = Annotation.Root({
 async function agentNode(state) {
   const { settings, deviceList, messages, signal, onStream, toolRound } = state;
 
-  // os_terminal devices are only visible to the agent when os_command skill is enabled.
-  // If the skill is off, hide them entirely — the agent won't know they exist
-  // and therefore won't try to interact with them via any tool.
-  const osCommandEnabled = (settings.skills || []).some(s => s.name === 'os_command' && s.enabled)
-  const visibleDevices = osCommandEnabled
-    ? deviceList
-    : (deviceList || []).filter(d => d.type !== 'os_terminal')
+  // Build the set of enabled skill names so we can decide which device types
+  // are visible to the agent. A device type is hidden when every skill that
+  // can interact with it is disabled — the agent can't do anything with it anyway.
+  //
+  // Mapping: device.type → skill names that grant access
+  //   digital / analog  → mqtt_publish OR mqtt_read (either one is enough to show)
+  //   os_terminal       → os_command only
+  //
+  // Add new entries here whenever a new device type / skill pair is introduced.
+  const enabledSkills = new Set(
+    (settings.skills || []).filter(s => s.enabled).map(s => s.name)
+  )
+  const deviceTypeAccess = {
+    digital:     ['mqtt_publish', 'mqtt_read'],
+    analog:      ['mqtt_publish', 'mqtt_read'],
+    os_terminal: ['os_command'],
+  }
+  const visibleDevices = (deviceList || []).filter(d => {
+    const required = deviceTypeAccess[d.type]
+    // Unknown device types: always visible (future-proof)
+    if (!required) return true
+    return required.some(skill => enabledSkills.has(skill))
+  })
 
   const llm = new ChatOpenAI({
     apiKey: settings.apiKey,
