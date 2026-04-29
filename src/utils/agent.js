@@ -364,7 +364,7 @@ ${toolContext}`
   let reply = ''
 
   await llm.stream(
-    [{ role: 'system', content: systemPrompt }, ...apiHistory, { role: 'user', content: text }],
+    [{ role: 'system', content: systemPrompt }, { role: 'user', content: text }],
     { temperature: 0.6, frequency_penalty: 0.3, max_tokens: 4096 },
     chunk => { reply += chunk; onStream?.(chunk) },
     signal
