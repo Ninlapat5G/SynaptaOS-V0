@@ -138,16 +138,19 @@ function summarizeDevices(deviceList) {
 
 // ── Responder Tool Context Formatter ─────────────────────────────────────────
 
-function formatResultsForResponder(allToolResults) {
+function formatResultsForResponder(allToolResults, deviceList) {
   return allToolResults.map(t => {
     const ok = t.result?.error === undefined
     if (!ok) return `[${t.name}] Error: ${t.result.error}`
 
+    const device = deviceList?.find(d => d.pubTopic === t.args?.topic || d.subTopic === t.args?.topic)
+    const label = device ? `${device.name} (${device.room})` : t.args?.topic
+
     switch (t.name) {
       case 'mqtt_publish':
-        return `[${t.name}] Set ${t.args?.topic} = ${t.args?.payload}`
+        return `[${t.name}] Set ${label} = ${t.args?.payload}`
       case 'mqtt_read':
-        return `[${t.name}] ${t.args?.topic} = ${t.result.value ?? 'no data'}`
+        return `[${t.name}] ${label} = ${t.result.value ?? 'no data'}`
       case 'web_search':
         return `[${t.name}] Query: ${t.args?.query}\n${t.result.summary}`
       case 'os_command':
@@ -338,7 +341,7 @@ async function responderNode(state) {
   const llm = createLLMClient(settings)
 
   const toolContext = allToolResults.length
-    ? formatResultsForResponder(allToolResults)
+    ? formatResultsForResponder(allToolResults, deviceList)
     : 'None — no tools were called'
 
   const stateSummary = allToolResults.length === 0
