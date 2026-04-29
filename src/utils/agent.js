@@ -75,16 +75,18 @@ async function agentNode(state) {
     settings.systemPrompt || "You are a helpful smart home assistant."
   );
 
+  // ✨ กฎเหล็ก Ironclad: ตบหน้า LLM ให้เลิกหลอน เลิกมโน
   const contextMessage = new SystemMessage(`[SYSTEM ENVIRONMENT]
 Time: ${nowString()} | User: ${settings.profile?.name || 'User'}
 
 [DEVICES]
 ${summarizeDevices(deviceList)}
 
-[STRICT DIRECTIVES]
-1. USE TOOLS: Always use tools for actions or searching. Never assume device states.
-2. CONTEXTUAL ARGS: When calling tools, provide fully resolved arguments.
-3. RELY ON RESULTS: Read [Tool Results] before replying. If a tool fails, tell the user.`);
+[IRONCLAD RULES - DO NOT IGNORE]
+1. NO HALLUCINATIONS: NEVER claim you have executed an action, changed a device state, or fixed a problem UNLESS you have actually called a tool and see its SUCCESSFUL result in the history.
+2. ACTION BEFORE WORDS: If the user asks to control something, implies a device should be changed, or complains about a state (e.g., "Why is it on?"), YOU MUST CALL THE TOOL IMMEDIATELY. Do not just apologize.
+3. EXPLICIT ARGS: Resolve pronouns (it, this) to the explicit device name.
+4. EXPLAIN FAILURES: If a tool returns an error, explicitly tell the user. Do not cover it up.`);
 
   const fullMessages = [personaMessage, contextMessage, ...messages];
 
@@ -95,7 +97,7 @@ ${summarizeDevices(deviceList)}
     if (!finalMessage) finalMessage = chunk;
     else finalMessage = finalMessage.concat(chunk);
 
-    // ✨ แก้หลอน 1: สตรีมเฉพาะ Text ที่ไม่ใช่ขยะจากการเตรียมเรียก Tool
+    // ✨ สตรีมเฉพาะเนื้อหาที่คุยกับ User ตัดขยะ Tool Chunk ทิ้ง
     if (chunk.content && !chunk.tool_call_chunks?.length) {
       onStream?.(chunk.content);
     }
@@ -111,7 +113,7 @@ async function toolNode(state) {
   const lastMessage = messages[messages.length - 1];
   const toolCalls = lastMessage.tool_calls || [];
 
-  // ✨ รันแบบ PARALLEL ของแทร่! ใช้ Promise.all ให้มันยิง Tool พร้อมกันทีเดียว
+  // ✨ รัน Tool แบบ Parallel โหลดพร้อมกันรัวๆ
   const promises = toolCalls.map(async (tc) => {
     onToolCall?.(tc.name, tc.args, currentRound);
     let result;
@@ -129,7 +131,6 @@ async function toolNode(state) {
     });
   });
 
-  // รอให้ทุก Tool ทำงานเสร็จพร้อมกัน
   const toolMessages = await Promise.all(promises);
 
   return { messages: toolMessages, toolRound: currentRound };
@@ -140,7 +141,7 @@ async function toolNode(state) {
 function shouldContinue(state) {
   const lastMessage = state.messages[state.messages.length - 1];
   if (lastMessage.tool_calls && lastMessage.tool_calls.length > 0) {
-    // ✨ ลดรอบลงมาเหลือ 3 พอ ถ้ามันยังโง่เรียก Tool เดิมๆ ก็ตัดจบเลย จะได้ไม่ค้าง
+    // ✨ ลิมิตลูปไว้แค่ 3 รอบ กันมันคิดวนจนแอปค้าง
     if (state.toolRound >= 3) {
       console.warn("[Agent] Reached max tool rounds. Forcing exit.");
       return END;
@@ -173,7 +174,7 @@ export const runAgent = async (params) => {
 
   const lastMsg = finalState.messages[finalState.messages.length - 1];
 
-  // ✨ แก้หลอน 2: ดักจับกรณีมันโดนเตะออกจากลูป แล้วข้อความสุดท้ายเป็น Tool Call (เนื้อหาว่างเปล่า)
+  // ✨ ดักกรณีจบกราฟแล้วไม่มี Text มีแต่ Tool เพื่อให้ UI ไม่เอ๋อ
   let finalReply = lastMsg.content;
   if (!finalReply && lastMsg.tool_calls?.length > 0) {
     finalReply = "ขออภัยค่ะ ระบบพยายามดำเนินการหลายครั้งแต่ไม่สำเร็จ ลองสั่งใหม่อีกครั้งนะคะ 🥺";
@@ -182,7 +183,7 @@ export const runAgent = async (params) => {
   return { reply: finalReply };
 };
 
-// ── 4. Sub-Agents ─────────────────────────
+// ── 4. Sub-Agents ────────────────────────────────────────────────────────────
 
 export async function generateOsCommand({ settings, instruction, os, signal }) {
   const llm = new ChatOpenAI({
