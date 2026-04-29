@@ -20,30 +20,28 @@
        │
        ▼
 ┌──────────────────────────────────────────┐
-│            Mini Agent Graph              │
+│         LangGraph ReAct Loop             │
 │                                          │
-│  [router]  temp=0.1                      │
-│   รู้เวลาปัจจุบัน · เลือก tool           │
-│   รองรับคำสั่งตรงและอ้อมค้อม            │
-│       │                  │               │
-│  มี tool calls       ไม่มี tool calls    │
-│       ▼                  ▼               │
-│  [tool_executor]    [responder]          │
-│   รันพร้อมกัน (parallel)                │
-│       │                                  │
-│   web_search? → [synthesizer]            │
-│   ดึงข้อมูล → สรุปก่อนส่งต่อ            │
-│       │                                  │
-│   shouldRunPlanner?                      │
-│   (ข้ามถ้า mqtt_publish ล้วนๆ)           │
-│       ▼                                  │
-│  [planner]  temp=0.1                     │
-│   completion checker — ครบมั้ย?          │
-│   อ่าน summary ไม่ใช่ raw JSON           │
-│       │                                  │
-│       ▼                                  │
-│  [responder]  temp=0.7                   │
-│   รู้เวลาปัจจุบัน · streaming            │
+│  ┌─────────────────────┐                 │
+│  │   [agent]  temp=0.2 │◄────────┐       │
+│  │  รู้เวลาปัจจุบัน    │         │       │
+│  │  รู้ device list    │         │       │
+│  │  เลือก tool หรือ   │         │       │
+│  │  ตอบตรง            │         │       │
+│  └──────┬──────────────┘         │       │
+│         │ tool_calls?            │       │
+│    ┌────┴─────────────────┐      │       │
+│    │  มี tool calls       │      │       │
+│    │         ▼            │  ────┘       │
+│    │  [tools]             │  ↑ loop      │
+│    │  รัน parallel        │  (max 3 รอบ) │
+│    │  Promise.all         │              │
+│    │  ✅ ToolMessage ส่ง  │              │
+│    │  กลับให้ agent       │              │
+│    └──────────────────────┘              │
+│                                          │
+│    ไม่มี tool calls → END               │
+│    (stream คำตอบให้ user ทันที)          │
 └──────────────────────────────────────────┘
        │
        ▼
@@ -62,7 +60,9 @@ Device Cards อัปเดต real-time (MQTT QoS 2)
 | Markdown | `react-markdown` — AI responses render bold, lists, code blocks, clickable links |
 | IoT Protocol | MQTT over WebSocket — `mqtt.js` v5 · **QoS 2** · auto-reconnect |
 | AI / LLM | OpenAI-compatible API · รองรับ Typhoon, OpenAI, OpenRouter, Ollama และทุก provider ที่ใช้ `/chat/completions` |
-| Agent | Mini graph engine — router → tool_executor → planner → responder |
+| Agent Engine | **LangGraph** (`@langchain/langgraph`) — ReAct loop: agent ↔ tools · max 3 rounds |
+| LLM Client | `@langchain/openai` + `@langchain/core` |
+| QR Code | `qrcode` (generate) + `jsqr` (scan) — Share Configuration via QR |
 | Voice | Web Speech API (Chrome/Edge) |
 | Storage | `localStorage` — ไม่มี backend |
 | Deployment | Vercel (static site) |
@@ -80,7 +80,7 @@ src/
 │   ├── useMQTT.js            # MQTT connection, publish, sensorCache, waitForMessage
 │   └── useChat.js            # Chat messages, agent loop, streaming, history limit
 ├── utils/
-│   ├── agent.js              # Graph engine + LLM client + os command generator + strict filtering
+│   ├── agent.js              # LangGraph ReAct graph + LLM client + OS/search sub-agents
 │   ├── agentSkills.js        # Skill handlers (mqtt_publish, mqtt_read, os_command, web_search)
 │   ├── mqttTopic.js          # normalizeBase / buildFullTopic helpers
 │   └── storage.js            # localStorage helpers
@@ -96,8 +96,12 @@ src/
     ├── Nav.jsx
     ├── DeviceCard.jsx        # digital / analog / os_terminal device types
     ├── ChatPage.jsx          # AI Chat + Voice input + Stop button
-    ├── SettingsPage.jsx      # 6 sections + JSON export/import
+    ├── SettingsPage.jsx      # 7 sections + QR export/import
     └── TweaksPanel.jsx       # Live theme editor
+
+build_com_agent/
+├── terminal_agent.py         # Python MQTT agent รับคำสั่งแล้วรัน terminal จริงบนเครื่อง
+└── terminal_agent.exe        # Pre-built binary สำหรับ Windows
 ```
 
 ---
@@ -163,40 +167,41 @@ npm run build    # production build
 | 03 Skills | เปิด/ปิด tool หรือเพิ่ม custom tool พร้อม JSON Schema |
 | 04 Integrations | Serper API Key สำหรับ web_search skill |
 | 05 MQTT Broker | URL · Port · Base Topic · สถานะการเชื่อมต่อ |
-| 06 Share Configuration | Copy/Paste JSON เพื่อย้าย config ข้ามเครื่อง |
+| 06 Share Configuration | Copy/Paste JSON หรือ **QR Code** เพื่อย้าย config ข้ามเครื่อง |
 | 07 Data | ปุ่ม Clear all local data |
 
 ---
 
-## Agent ทำงานยังไง
+## Agent ทำงานยังไง (LangGraph ReAct)
 
-### Router Node — ตัดสินใจ
+สถาปัตยกรรมใช้ **LangGraph ReAct loop** — agent ตัดสินใจเองว่าจะเรียก tool อีกรอบหรือตอบ user โดยตรง
+
+### Agent Node
 
 - รู้ **วันเวลาปัจจุบัน** — formulate web search query ได้ถูกต้อง เช่น "ข่าววันนี้" → query ที่ระบุวันที่จริง
 - ได้รับ device list (human-readable summary ไม่ใช่ raw JSON) + skills ที่เปิด + ประวัติสนทนา
 - รองรับคำสั่ง **ตรง** ("เปิดไฟ") และ **อ้อมค้อม** ("มืดมากเลย" → เปิดไฟ)
-- guard ชัดเจน: ไม่เรียก tool สำหรับ greetings / small talk / คำถามเกี่ยวกับตัว AI
-- `temperature=0.1` · คืน `tool_calls[]` เท่านั้น
+- **IRONCLAD RULE — Device Awareness**: ถ้าคำสั่งชี้ไปที่อุปกรณ์ที่ไม่มีในลิสต์ จะ**ไม่ publish ทันที** — จะแจ้ง user ก่อนและขอให้ยืนยัน + ระบุ MQTT topic เองก่อน
+- `temperature=0.2` · stream คำตอบทีละ token ขณะที่ไม่มี tool call
 
-### Tool Executor Node — รันจริง
+### Tools Node
 
-- รัน tool calls **พร้อมกันทั้งหมด** (Promise.all)
+- รัน tool calls **พร้อมกันทั้งหมด** (Promise.all) — ไม่รอทีละตัว
 - UI แสดง ToolPill แต่ละตัวพร้อม label `R1` / `R2` บอก round
-- **web_search** ดึงข้อมูลจาก Serper แล้วแปลงเป็น plain text ทันที (answerBox + knowledgeGraph + organic snippets) — ส่งเนื้อหาครบถ้วนต่อให้ responder โดยไม่ผ่าน LLM summarizer เพื่อไม่ให้สาระสำคัญหาย
+- ผล tool ถูกแปลงเป็น `ToolMessage` และส่งกลับเข้า agent node เพื่อ reasoning ต่อ
 
-### Planner Node — Completion Checker (R2)
+### ReAct Loop Control
 
-- ทำงานเป็น **completion checker** ไม่ใช่ planner ทั่วไป — ถามว่า "ครบทุก target มั้ย?"
-- อ่าน executed results ในรูป human-readable (`✅ mqtt_publish → Lamp (Living Room) = true`) ไม่ใช่ raw JSON
-- ใช้ประวัติสนทนาเพื่อ resolve multi-turn reference เช่น "ทำแบบเดิมกับห้องนั่งเล่นด้วย"
-- ข้าม planner อัตโนมัติถ้า round 1 มีแค่ mqtt_publish สำเร็จ (ไม่มีข้อมูลใหม่ให้คิด)
-- tool ที่ succeed แล้วจะไม่ถูกเรียกซ้ำ — retry เฉพาะ target ที่ fail หรือยังขาดอยู่
+- หลัง tools รัน agent จะ reason ต่อว่า "ครบหรือยัง?" — ถ้ายังขาดอยู่จะเรียก tool รอบใหม่
+- ลิมิต **สูงสุด 3 รอบ** — กันลูปวนไม่จบ
+- tool ที่ disabled จะถูกบล็อกทั้งที่ชั้น tool list (LLM ไม่เห็น) และที่ชั้น execution
 
-### Responder Node — ตอบผู้ใช้
+### Sub-Agents (ไม่ขึ้น Graph)
 
-- รู้ **วันเวลาปัจจุบัน** — ตอบคำถาม time-sensitive ได้แม่นยำ แต่ไม่บอกเวลาโดยไม่จำเป็น
-- เห็น device state เฉพาะตอนที่ไม่มี tool รัน (ป้องกัน snapshot เก่าขัดแย้งกับ tool result)
-- `temperature=0.7` · stream คำตอบทีละ token
+| Sub-Agent | หน้าที่ | temp |
+|---|---|---|
+| `generateOsCommand` | แปลภาษาคนเป็น terminal command ก่อนส่ง MQTT · ปฏิเสธคำสั่ง destructive | 0 |
+| `generateSearchQuery` | optimize คำค้นก่อนยิง Serper API | 0.1 |
 
 ---
 
@@ -207,13 +212,34 @@ npm run build    # production build
 | `mqtt_publish` | publish payload ไปยัง device topic | MQTT |
 | `mqtt_read` | อ่านค่าล่าสุดจาก sensor topic | MQTT |
 | `os_command` | แปลภาษาคนเป็น terminal command แล้วส่งไปยัง os_terminal device | MQTT |
-| `web_search` | ค้นหาข้อมูลผ่าน Serper API → synthesizer สรุปผลก่อนส่ง agent | Serper API Key |
+| `web_search` | ค้นหาข้อมูลผ่าน Serper API · ผลดิบส่งตรงไปยัง agent context | Serper API Key |
 
 เปิด/ปิด skill ได้ที่ Settings → Section 03 — skill ที่ปิดจะถูกบล็อกทั้งจาก tool list ที่ LLM เห็น และที่ชั้น execution ดังนั้น tool ที่ disabled จะไม่ทำงานได้แม้ในกรณี prompt injection
 
 เพิ่ม custom skill ได้ที่ Settings → Section 03 — กำหนด name, description, JSON Schema ได้อิสระ
 
 > **web_search** ต้องใส่ Serper API Key ที่ Settings → 04 Integrations · รับ key ฟรีได้ที่ [serper.dev](https://serper.dev) (Free tier: 2,500 queries)
+
+---
+
+## Terminal Agent (build_com_agent)
+
+Python agent สำหรับรัน terminal command จริงบนเครื่อง PC ผ่าน MQTT
+
+```bash
+# รันบนเครื่องที่ต้องการควบคุม
+python terminal_agent.py office-pc
+# หรือใช้ binary (Windows)
+terminal_agent.exe office-pc
+```
+
+- subscribe topic `Mylab/smarthome/{computer_name}/cmd`
+- รัน command จริงด้วย `subprocess.getoutput()`
+- รองรับ `cd` (อัปเดต working directory จริง)
+- publish output กลับที่ `Mylab/smarthome/{computer_name}/output`
+- เชื่อมต่อด้วย TLS (port 8883)
+
+สร้าง device ประเภท `os_terminal` ในแอปแล้วชี้ pubTopic ไปที่ `/cmd` topic ของเครื่อง จากนั้น AI จะแปลคำสั่งภาษาไทยแล้วรันได้ทันที
 
 ---
 
