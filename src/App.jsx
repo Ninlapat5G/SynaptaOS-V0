@@ -91,7 +91,8 @@ export default function App() {
   }, [])
 
   // ── MQTT hook ─────────────────────────────────────────────────────────────────
-  const { client: mqttClient, status: mqttStatus, sensorCache, publish: mqttPublish, waitForMessage: mqttWaitForMessage } = useMQTT({
+  const { client: mqttClient, status: mqttStatus, sensorCache, publish: mqttPublish,
+    waitForMessage: mqttWaitForMessage, waitForStream: mqttWaitForStream } = useMQTT({
     broker: settings.mqtt.broker,
     port: settings.mqtt.port,
     baseTopic: settings.mqtt.baseTopic,
@@ -114,11 +115,11 @@ export default function App() {
   // ── Tool executor ─────────────────────────────────────────────────────────────
   const executeTool = useCallback(
     createExecuteTool({
-      mqttClient, sensorCache, settings, mqttWaitForMessage,
+      mqttClient, sensorCache, settings, mqttWaitForMessage, mqttWaitForStream,
       devicesRef, baseTopicRef, setDevices,
       normalizeBase, buildFullTopic, generateOsCommand,
     }),
-    [mqttClient, sensorCache, settings, mqttWaitForMessage]
+    [mqttClient, sensorCache, settings, mqttWaitForMessage, mqttWaitForStream]
   )
 
   // ── Raw MQTT publish ──────────────────────────────────────────────────────────

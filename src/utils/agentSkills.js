@@ -1,6 +1,6 @@
 // ── Skill Tool Handlers ────────────────────────────────────────────────────────
 // Each handler: async (args, ctx) => result
-// ctx = { mqttClient, settings, mqttWaitForMessage,
+// ctx = { mqttClient, settings, mqttWaitForStream,
 //          devicesRef, baseTopicRef, setDevices,
 //          normalizeBase, buildFullTopic, generateOsCommand }
 //
@@ -8,6 +8,8 @@
 //   1. Add a handler function below
 //   2. Register it in toolHandlers map
 //   3. Add its definition to DEFAULT_SETTINGS.skills in data.js
+
+import { generateSearchQuery } from './agent.js'
 
 const SERPER_URL = 'https://google.serper.dev/search'
 
@@ -21,7 +23,6 @@ async function mqttPublish(args, ctx) {
     d => d.pubTopic === topic || d.pubTopic?.endsWith('/' + topic)
   )
 
-  // ✨ ปลดล็อคความล้ำ: ถ้าหาไม่เจอในลิสต์ ให้ถือว่าเป็น Raw Topic ยิงสดไปเลย!
   let finalTopic = topic;
   let isRaw = false;
 
@@ -38,7 +39,6 @@ async function mqttPublish(args, ctx) {
     mqttClient.publish(fullTopic, String(payload), { qos: 2 }, err => {
       if (err) { resolve({ success: false, error: err.message }); return }
 
-      // อัปเดต UI เฉพาะของที่มีในลิสต์
       if (device) {
         setDevices(prev => prev.map(d => {
           if (d.id !== device.id) return d
@@ -77,7 +77,7 @@ async function mqttRead(args, ctx) {
 
 async function osCommand(args, ctx) {
   const { mqttClient, settings, devicesRef, baseTopicRef,
-    mqttWaitForMessage, normalizeBase, buildFullTopic, generateOsCommand } = ctx
+    mqttWaitForStream, normalizeBase, buildFullTopic, generateOsCommand } = ctx
 
   const { instruction, os, topic, wait_output } = args
   if (!mqttClient) return { success: false, error: 'MQTT not connected' }
@@ -99,6 +99,9 @@ async function osCommand(args, ctx) {
     ? buildFullTopic(device.subTopic, base)
     : null
 
+  // Register stream listener BEFORE publishing so no early chunks are missed
+  const streamPromise = outputTopic ? mqttWaitForStream(outputTopic, 10000) : null
+
   try {
     await new Promise((resolve, reject) =>
       mqttClient.publish(fullTopic, command, { qos: 2 }, err => err ? reject(err) : resolve())
@@ -107,10 +110,17 @@ async function osCommand(args, ctx) {
     return { success: false, error: err.message }
   }
 
-  const output = outputTopic ? await mqttWaitForMessage(outputTopic, 10000) : null
+  if (!streamPromise) return { success: true, summary: `Command sent: ${command}` }
 
-  if (output != null) return { success: true, summary: `Ran: ${command}\n\n${output}` }
-  return { success: true, summary: `Command executed: ${command}` }
+  const { chunks, timedOut } = await streamPromise
+  const output = chunks.join('\n')
+
+  if (timedOut && chunks.length === 0) {
+    return { success: true, summary: `Command sent: ${command}\n\n⚠️ ไม่ได้รับผลลัพธ์ — terminal agent อาจออฟไลน์อยู่` }
+  }
+
+  const timeoutNote = timedOut ? '\n\n⚠️ ไม่ได้รับ (mqtt_end) — terminal agent อาจขาดการเชื่อมต่อ' : ''
+  return { success: true, summary: `Ran: ${command}\n\n${output || '(no output)'}${timeoutNote}` }
 }
 
 async function webSearch(args, ctx) {
@@ -122,12 +132,17 @@ async function webSearch(args, ctx) {
   const apiKey = settings.serperApiKey
   if (!apiKey) return { success: false, error: 'Serper API key ยังไม่ได้ตั้งค่า — ไปที่ Settings → Integrations' }
 
+  let optimizedQuery = query
+  try {
+    optimizedQuery = await generateSearchQuery({ settings, query })
+  } catch { /* ใช้ query เดิมถ้า optimize ไม่ได้ */ }
+
   let res
   try {
     res = await fetch(SERPER_URL, {
       method: 'POST',
       headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ q: query, num: 5 }),
+      body: JSON.stringify({ q: optimizedQuery, num: 3 }),
     })
   } catch (err) {
     return { success: false, error: `Network error: ${err.message}` }
@@ -154,7 +169,7 @@ async function webSearch(args, ctx) {
     parts.push(organic.map(r => `${r.title}\n${r.snippet}\n${r.link}`).join('\n\n'))
 
   const summary = parts.join('\n\n') || 'No results found'
-  return { success: true, query, summary }
+  return { success: true, query: optimizedQuery, summary }
 }
 
 // ── Registry ───────────────────────────────────────────────────────────────────

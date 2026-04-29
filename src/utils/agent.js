@@ -1,6 +1,6 @@
 import { StateGraph, START, END, Annotation, messagesStateReducer } from "@langchain/langgraph";
 import { ChatOpenAI } from "@langchain/openai";
-import { SystemMessage, HumanMessage, ToolMessage, AIMessage } from "@langchain/core/messages";
+import { SystemMessage, HumanMessage, ToolMessage, AIMessage, trimMessages } from "@langchain/core/messages";
 
 // ── 0. Helpers ────────────────────────────────────────────────────────────────
 function nowString() {
@@ -55,7 +55,7 @@ const AgentState = Annotation.Root({
 // ── 2. Nodes (Main Agent) ────────────────────────────────────────────────────
 
 async function agentNode(state) {
-  const { settings, deviceList, messages, signal, onStream } = state;
+  const { settings, deviceList, messages, signal, onStream, toolRound } = state;
 
   const llm = new ChatOpenAI({
     apiKey: settings.apiKey,
@@ -65,7 +65,7 @@ async function agentNode(state) {
       dangerouslyAllowBrowser: true
     },
     modelName: settings.model,
-    temperature: 0.2,
+    temperature: toolRound === 0 ? 0.1 : 0.5,
   });
 
   const tools = buildLangChainTools(settings);
@@ -75,7 +75,6 @@ async function agentNode(state) {
     settings.systemPrompt || "You are a helpful smart home assistant."
   );
 
-  // ✨ กฎใหม่โคตรล้ำ: ทักท้วงก่อน ถ้ามึงดื้อก็จะยอมยิงให้
   const contextMessage = new SystemMessage(`[SYSTEM ENVIRONMENT]
   Time: ${nowString()} | User: ${settings.profile?.name || 'User'}
 
@@ -99,7 +98,6 @@ async function agentNode(state) {
     if (!finalMessage) finalMessage = chunk;
     else finalMessage = finalMessage.concat(chunk);
 
-    // ✨ สตรีมเฉพาะเนื้อหาที่คุยกับ User ตัดขยะ Tool Chunk ทิ้ง
     if (chunk.content && !chunk.tool_call_chunks?.length) {
       onStream?.(chunk.content);
     }
@@ -115,7 +113,6 @@ async function toolNode(state) {
   const lastMessage = messages[messages.length - 1];
   const toolCalls = lastMessage.tool_calls || [];
 
-  // ✨ รัน Tool แบบ Parallel โหลดพร้อมกันรัวๆ
   const promises = toolCalls.map(async (tc) => {
     onToolCall?.(tc.name, tc.args, currentRound);
     let result;
@@ -143,7 +140,6 @@ async function toolNode(state) {
 function shouldContinue(state) {
   const lastMessage = state.messages[state.messages.length - 1];
   if (lastMessage.tool_calls && lastMessage.tool_calls.length > 0) {
-    // ✨ ลิมิตลูปไว้แค่ 3 รอบ กันมันคิดวนจนแอปค้าง
     if (state.toolRound >= 3) {
       console.warn("[Agent] Reached max tool rounds. Forcing exit.");
       return END;
@@ -163,10 +159,19 @@ const workflow = new StateGraph(AgentState)
 const compiledGraph = workflow.compile();
 
 export const runAgent = async (params) => {
-  const previousMessages = (params.apiHistory || []).map(m =>
+  const rawMessages = (params.apiHistory || []).map(m =>
     m.role === 'user' ? new HumanMessage(m.content) : new AIMessage(m.content)
   );
-  previousMessages.push(new HumanMessage(params.text));
+  rawMessages.push(new HumanMessage(params.text));
+
+  // Budget: 128K context − ~3,750 overhead − 1.5× Thai underestimate factor → safe at 20K
+  const previousMessages = await trimMessages(rawMessages, {
+    maxTokens: 20000,
+    tokenCounter: msgs => msgs.reduce((sum, m) => sum + Math.ceil(String(m.content).length / 3), 0),
+    strategy: 'last',
+    startOn: 'human',
+    allowPartial: false,
+  });
 
   const finalState = await compiledGraph.invoke({
     ...params,
@@ -176,7 +181,6 @@ export const runAgent = async (params) => {
 
   const lastMsg = finalState.messages[finalState.messages.length - 1];
 
-  // ✨ ดักกรณีจบกราฟแล้วไม่มี Text มีแต่ Tool เพื่อให้ UI ไม่เอ๋อ
   let finalReply = lastMsg.content;
   if (!finalReply && lastMsg.tool_calls?.length > 0) {
     finalReply = "ขออภัยค่ะ ระบบพยายามดำเนินการหลายครั้งแต่ไม่สำเร็จ ลองสั่งใหม่อีกครั้งนะคะ 🥺";
@@ -193,15 +197,20 @@ export async function generateOsCommand({ settings, instruction, os, signal }) {
     configuration: { apiKey: settings.apiKey, baseURL: settings.endpoint, dangerouslyAllowBrowser: true },
     modelName: settings.model,
     temperature: 0,
+  }).withStructuredOutput({
+    type: 'object',
+    properties: {
+      command: { type: 'string', description: 'The exact terminal command to execute, or UNSAFE' }
+    },
+    required: ['command']
   });
 
   const OS_COMMAND_SYSTEM = `You are a strict OS Command Translator.
 Target OS: ${os}
 Task: Convert the instruction into a valid, executable terminal command.
 [RULES]
-1. OUTPUT ONLY THE RAW COMMAND STRING.
-2. NO markdown formatting, NO explanations.
-3. If highly destructive/malicious, output EXACTLY: UNSAFE`;
+1. Return the raw command in the "command" field — no markdown, no explanations.
+2. If highly destructive/malicious, return EXACTLY: UNSAFE`;
 
   const messages = [
     new SystemMessage(OS_COMMAND_SYSTEM),
@@ -209,12 +218,12 @@ Task: Convert the instruction into a valid, executable terminal command.
   ];
 
   const response = await llm.invoke(messages, { signal });
-  const cmd = response.content.trim();
+  const cmd = response.command?.trim();
 
   if (!cmd) throw new Error('ไม่สามารถสร้างคำสั่งได้');
   if (cmd === 'UNSAFE') throw new Error('คำสั่งนี้มีความเสี่ยงสูง — ระบบปฏิเสธการรัน');
 
-  return cmd.replace(/^```[a-z]*\n/i, '').replace(/\n```$/i, '').trim();
+  return cmd;
 }
 
 export async function generateSearchQuery({ settings, query, signal }) {
@@ -223,28 +232,30 @@ export async function generateSearchQuery({ settings, query, signal }) {
     configuration: { apiKey: settings.apiKey, baseURL: settings.endpoint, dangerouslyAllowBrowser: true },
     modelName: settings.model,
     temperature: 0.1,
+  }).withStructuredOutput({
+    type: 'object',
+    properties: {
+      query: { type: 'string', description: 'Optimized search query for web search engine' }
+    },
+    required: ['query']
   });
 
   const SEARCH_QUERY_SYSTEM = `You are a Search Query Optimizer.
 Task: Clean and optimize the provided text for a web search engine.
 [RULES]
-1. OUTPUT ONLY THE RAW SEARCH QUERY. No quotes, no explanations.
+1. Return the optimized query in the "query" field.
 2. Remove conversational fillers.
 3. Keep the most relevant keywords.`;
 
   const messages = [
     new SystemMessage(SEARCH_QUERY_SYSTEM),
-    new HumanMessage(`Raw query: "${query}"\nOptimized query:`)
+    new HumanMessage(`Raw query: "${query}"`)
   ];
 
   try {
     const response = await llm.invoke(messages, { signal });
-    let optimizedQuery = response.content.trim();
-    if (optimizedQuery.startsWith('"') && optimizedQuery.endsWith('"')) {
-      optimizedQuery = optimizedQuery.slice(1, -1);
-    }
-    return optimizedQuery || query;
-  } catch (err) {
+    return response.query?.trim() || query;
+  } catch {
     return query;
   }
 }
