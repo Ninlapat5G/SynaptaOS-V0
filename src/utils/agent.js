@@ -369,7 +369,7 @@ ${stateSummary}`
 
   await llm.stream(
     messages,
-    { temperature: 0.7, max_tokens: 4096 },
+    { temperature: 0.6, frequency_penalty: 0.3, max_tokens: 4096 },
     chunk => { reply += chunk; onStream?.(chunk) },
     signal
   )
