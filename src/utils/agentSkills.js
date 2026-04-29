@@ -108,10 +108,10 @@ async function osCommand(args, ctx) {
     return { success: false, error: err.message }
   }
 
-  const output = outputTopic ? await mqttWaitForMessage(outputTopic, 10000) : null
+  const output = outputTopic ? await mqttWaitForMessage(outputTopic, 30000) : null
 
   if (output != null) return { success: true, summary: `Ran: ${command}\n\n${output}` }
-  return { success: true, summary: `Command executed: ${command}` }
+  return { success: true, summary: `⚠️ No output received (timeout). Command was sent: ${command}` }
 }
 
 async function webSearch(args, ctx) {

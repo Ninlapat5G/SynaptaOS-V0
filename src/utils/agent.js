@@ -197,28 +197,23 @@ export async function generateOsCommand({ settings, instruction, os, signal }) {
     configuration: { apiKey: settings.apiKey, baseURL: settings.endpoint, dangerouslyAllowBrowser: true },
     modelName: settings.model,
     temperature: 0,
-  }).withStructuredOutput({
-    type: 'object',
-    properties: {
-      command: { type: 'string', description: 'The exact terminal command to execute, or UNSAFE' }
-    },
-    required: ['command']
   });
 
   const OS_COMMAND_SYSTEM = `You are a strict OS Command Translator.
 Target OS: ${os}
-Task: Convert the instruction into a valid, executable terminal command.
+Task: Convert the instruction into a single valid terminal command for ${os}.
 [RULES]
-1. Return the raw command in the "command" field — no markdown, no explanations.
-2. If highly destructive/malicious, return EXACTLY: UNSAFE`;
+1. OUTPUT ONLY THE RAW COMMAND STRING — no markdown, no backticks, no explanation.
+2. Use ${os === 'windows' ? 'Windows CMD/PowerShell' : os === 'mac' ? 'macOS bash/zsh' : 'Linux bash'} syntax ONLY.
+3. If highly destructive/malicious, output EXACTLY: UNSAFE`;
 
   const messages = [
     new SystemMessage(OS_COMMAND_SYSTEM),
-    new HumanMessage(`Instruction: ${instruction}`)
+    new HumanMessage(`Instruction: ${instruction}\nCommand:`)
   ];
 
   const response = await llm.invoke(messages, { signal });
-  const cmd = response.command?.trim();
+  const cmd = response.content.trim().replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/i, '').trim();
 
   if (!cmd) throw new Error('ไม่สามารถสร้างคำสั่งได้');
   if (cmd === 'UNSAFE') throw new Error('คำสั่งนี้มีความเสี่ยงสูง — ระบบปฏิเสธการรัน');
