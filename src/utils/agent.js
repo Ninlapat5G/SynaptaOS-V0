@@ -128,10 +128,10 @@ function summarizeDevices(deviceList) {
     .map(d => {
       const sub = d.subTopic ? ` | subTopic: ${d.subTopic}` : ''
       if (d.type === 'analog')
-        return `${d.name} (${d.room}) — analog, max ${d.max ?? 255} | pubTopic: ${d.pubTopic}${sub}`
+        return `${d.name} (${d.room}) — analog | state: ${d.value}/${d.max ?? 255} | pubTopic: ${d.pubTopic}${sub}`
       if (d.type === 'os_terminal')
         return `${d.name} (${d.room}) — os_terminal (${d.os ?? 'unknown OS'}) | pubTopic: ${d.pubTopic}${sub}`
-      return `${d.name} (${d.room}) — digital | pubTopic: ${d.pubTopic}${sub}`
+      return `${d.name} (${d.room}) — digital | state: ${d.on ? 'ON' : 'OFF'} | pubTopic: ${d.pubTopic}${sub}`
     })
     .join('\n') || 'No devices registered'
 }
@@ -202,8 +202,9 @@ mqtt_publish — call when the user intends to change a device state. Infer inte
   - Indirect intents: "it's too dark" (implies turn on light), "I'm freezing" (implies turn on heater/turn off AC)
   Rule: use the EXACT pubTopic from the device list. Digital payload = "true"/"false". Analog payload = number string 0–max.
 
-mqtt_read — call to check the current status or sensor value.
-  - Call for explicit requests ("what's the temp?") OR implicit checks where knowing the state is required to answer.
+mqtt_read — call ONLY for pure sensor devices (subTopic only, no pubTopic) to get live sensor values.
+  - Do NOT call for controllable devices — their current state is already shown in the device list above.
+  - Example valid use: temperature sensor, humidity sensor, door contact sensor with no pubTopic.
 
 os_command — call when the user wants to run a command on a remote machine AND an os_terminal device exists.
   Use the OS shown in the device list (e.g. "os_terminal (windows)") as the "os" argument — do NOT guess.
