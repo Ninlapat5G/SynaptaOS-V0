@@ -223,7 +223,7 @@ ${summarizeDevices(deviceList)}`
   try {
     data = await llm.chat(
       [{ role: 'system', content: systemPrompt }, ...apiHistory, { role: 'user', content: text }],
-      { ...(tools.length ? { tools, tool_choice: 'auto' } : {}), temperature: 0.1, frequency_penalty: 0.3, max_tokens: 4096 },
+      { ...(tools.length ? { tools, tool_choice: 'auto' } : {}), temperature: 0.1, max_tokens: 1024 },
       signal
     )
   } catch (err) {
@@ -304,7 +304,7 @@ Tool chaining rule:
   try {
     data = await llm.chat(
       [{ role: 'system', content: systemPrompt }, { role: 'user', content: text }],
-      { ...(tools.length ? { tools, tool_choice: 'auto' } : {}), temperature: 0.1, frequency_penalty: 0.3, max_tokens: 1024 },
+      { ...(tools.length ? { tools, tool_choice: 'auto' } : {}), temperature: 0.1, max_tokens: 512 },
       signal
     )
   } catch (err) {
