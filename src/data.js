@@ -35,7 +35,7 @@ export const DEFAULT_SETTINGS = {
       id: 'sensor_read',
       name: 'mqtt_read',
       description: 'Read the latest value from a connected sensor via MQTT topic.',
-      enabled: true,
+      enabled: false,
       schema: '{"type":"object","properties":{"topic":{"type":"string"}},"required":["topic"]}',
     },
     {
