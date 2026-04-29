@@ -32,6 +32,13 @@ export const DEFAULT_SETTINGS = {
   serperApiKey: '',
   skills: [
     {
+      id: 'sensor_read',
+      name: 'mqtt_read',
+      description: 'Read the current state of a device widget by its MQTT topic. Returns the live value from the UI.',
+      enabled: true,
+      schema: '{"type":"object","properties":{"topic":{"type":"string","description":"pubTopic or subTopic of the device"}},"required":["topic"]}',
+    },
+    {
       id: 'mqtt_pub',
       name: 'mqtt_publish',
       description: 'Publish a raw payload to an MQTT topic to control a device.',

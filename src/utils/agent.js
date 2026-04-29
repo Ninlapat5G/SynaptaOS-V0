@@ -197,6 +197,9 @@ Current date & time: ${nowString()}
 
 Return EMPTY (no tool calls) when the message is pure conversation: greetings, farewells, thanks, acknowledgements, questions about you as an AI, or opinions unrelated to any device.
 
+mqtt_read — call to check the current state of a device. Use the pubTopic or subTopic from the device list.
+  Returns the live value directly from the widget (no MQTT round-trip needed).
+
 mqtt_publish — call when the user intends to change a device state. Infer intent from context even without exact keywords.
   - Direct intents: "turn on the lamp", "ปิดไฟ", "dim to 50%"
   - Indirect intents: "it's too dark" (implies turn on light), "I'm freezing" (implies turn on heater/turn off AC)

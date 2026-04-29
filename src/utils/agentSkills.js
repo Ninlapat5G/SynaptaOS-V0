@@ -41,17 +41,20 @@ async function mqttPublish(args, ctx) {
 }
 
 async function mqttRead(args, ctx) {
-  const { sensorCache, baseTopicRef, normalizeBase, buildFullTopic } = ctx
+  const { devicesRef } = ctx
 
   const topic = typeof args === 'string' ? args.trim() : args?.topic
   if (!topic) return { success: false, error: 'No topic specified' }
 
-  const base = normalizeBase(baseTopicRef.current)
-  const fullTopic = buildFullTopic(topic, base)
-  const val = sensorCache[fullTopic]
+  const device = devicesRef.current.find(
+    d => d.pubTopic === topic || d.subTopic === topic ||
+         d.pubTopic?.endsWith('/' + topic) || d.subTopic?.endsWith('/' + topic)
+  )
 
-  if (val !== undefined) return { success: true, topic: fullTopic, value: val }
-  return { success: false, error: `No data cached for topic: ${fullTopic}` }
+  if (!device) return { success: false, error: `No device found for topic: ${topic}` }
+
+  const value = device.type === 'digital' ? (device.on ? 'ON' : 'OFF') : String(device.value)
+  return { success: true, device: device.name, room: device.room, value }
 }
 
 async function osCommand(args, ctx) {
@@ -141,6 +144,7 @@ async function webSearch(args, ctx) {
 
 const toolHandlers = {
   mqtt_publish: mqttPublish,
+  mqtt_read: mqttRead,
   os_command: osCommand,
   web_search: webSearch,
 }
