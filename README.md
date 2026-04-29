@@ -156,7 +156,7 @@ npm run build    # production build
 
 - พิมพ์หรือกดไมค์พูด (ภาษาไทย/อังกฤษ)
 - ปุ่มหยุดระหว่าง AI กำลังคิดหรือรัน tool
-- ประวัติแชทถูก trim ด้วย **token budget 4,000 tokens** (character estimate) ก่อนส่ง LLM — ไม่ overflow แม้ web_search คืนผลยาว
+- เก็บประวัติแชทล่าสุด **30 ข้อความ** (pre-filter) → trim ด้วย **token budget 20,000 tokens** ก่อนส่ง LLM — รองรับ ~30 turns โดยไม่ overflow แม้ web_search คืนผลยาว
 
 | ตัวอย่างคำสั่ง | ผลลัพธ์ |
 |---|---|
@@ -204,10 +204,10 @@ npm run build    # production build
 
 ### Sub-Agents (ไม่ขึ้น Graph)
 
-| Sub-Agent | หน้าที่ | temp |
-|---|---|---|
-| `generateOsCommand` | แปลภาษาคนเป็น terminal command ก่อนส่ง MQTT · ปฏิเสธคำสั่ง destructive | 0 |
-| `generateSearchQuery` | optimize คำค้นก่อนยิง Serper API | 0.1 |
+| Sub-Agent | หน้าที่ | temp | output |
+|---|---|---|---|
+| `generateOsCommand` | แปลภาษาคนเป็น terminal command ก่อนส่ง MQTT · ปฏิเสธคำสั่ง destructive | 0 | structured `{ command }` |
+| `generateSearchQuery` | optimize คำค้นก่อนยิง Serper API · ดึง 3 ผลลัพธ์ | 0.1 | structured `{ query }` |
 
 ---
 
