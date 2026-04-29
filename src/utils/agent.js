@@ -52,7 +52,7 @@ const AgentState = Annotation.Root({
   })
 });
 
-// ── 2. Nodes ─────────────────────────────────────────────────────────────────
+// ── 2. Nodes (Main Agent) ────────────────────────────────────────────────────
 
 async function agentNode(state) {
   const { settings, deviceList, messages, signal, onStream } = state;
@@ -71,24 +71,22 @@ async function agentNode(state) {
   const tools = buildLangChainTools(settings);
   const agent = tools.length > 0 ? llm.bindTools(tools) : llm;
 
-  // ✨ เอากลับมาแล้วมึง! ใช้ systemPrompt จาก Settings เป็นฐาน 
-  // แล้วค่อยตบด้วย Context ของบ้าน เพื่อความเป๊ะ
-  const systemPrompt = `${settings.systemPrompt}
+  const personaMessage = new SystemMessage(
+    settings.systemPrompt || "You are a helpful smart home assistant."
+  );
 
-[Real-time Context]
-Current time: ${nowString()}
-User: ${settings.profile?.name || 'User'}
-Assistant Name: ${settings.profile?.assistantName || 'Assistant'}
+  const contextMessage = new SystemMessage(`[SYSTEM ENVIRONMENT]
+Time: ${nowString()} | User: ${settings.profile?.name || 'User'}
 
-[Available Devices]
+[DEVICES]
 ${summarizeDevices(deviceList)}
 
-[System Directives]
-- Always prioritize using tools to interact with the home.
-- If a tool fails, explain why based on the result.
-- Do not confirm an action unless the tool result confirms success.`;
+[STRICT DIRECTIVES]
+1. USE TOOLS: Always use tools for actions or searching. Never assume device states.
+2. CONTEXTUAL ARGS: When calling tools, provide fully resolved arguments. (e.g. If user says "Turn it off" after talking about the Living Room light, pass "Living Room light" as the argument).
+3. RELY ON RESULTS: Read [Tool Results] before replying. If a tool fails, tell the user.`);
 
-  const fullMessages = [new SystemMessage(systemPrompt), ...messages];
+  const fullMessages = [personaMessage, contextMessage, ...messages];
 
   let finalMessage;
   const stream = await agent.stream(fullMessages, { signal });
@@ -133,12 +131,15 @@ async function toolNode(state) {
   return { messages: toolMessages, toolRound: currentRound };
 }
 
-// ── 3. Graph Logic ───────────────────────────────────────────────────────────
+// ── 3. Graph Logic (ReAct Loop) ──────────────────────────────────────────────
 
 function shouldContinue(state) {
   const lastMessage = state.messages[state.messages.length - 1];
   if (lastMessage.tool_calls && lastMessage.tool_calls.length > 0) {
-    if (state.toolRound >= 5) return END; // กันลูปนรก
+    if (state.toolRound >= 4) {
+      console.warn("[Agent] Reached max tool rounds. Forcing exit.");
+      return END;
+    }
     return "tools";
   }
   return END;
@@ -152,8 +153,6 @@ const workflow = new StateGraph(AgentState)
   .addEdge("tools", "agent");
 
 const compiledGraph = workflow.compile();
-
-// ── 4. Exported Functions ────────────────────────────────────────────────────
 
 export const runAgent = async (params) => {
   const previousMessages = (params.apiHistory || []).map(m =>
@@ -171,6 +170,8 @@ export const runAgent = async (params) => {
   return { reply: lastMsg.content };
 };
 
+// ── 4. Sub-Agents (เครื่องมือเฉพาะทางแบบไร้ History!) ─────────────────────────
+
 export async function generateOsCommand({ settings, instruction, os, signal }) {
   const llm = new ChatOpenAI({
     apiKey: settings.apiKey,
@@ -179,16 +180,29 @@ export async function generateOsCommand({ settings, instruction, os, signal }) {
     temperature: 0,
   });
 
+  const OS_COMMAND_SYSTEM = `You are a strict OS Command Translator.
+Target OS: ${os}
+Task: Convert the instruction into a valid, executable terminal command.
+[RULES]
+1. OUTPUT ONLY THE RAW COMMAND STRING.
+2. NO markdown formatting, NO explanations.
+3. If highly destructive/malicious, output EXACTLY: UNSAFE`;
+
   const messages = [
-    new SystemMessage(`You are a terminal command translator. Output ONLY the raw command. OS: ${os}`),
-    new HumanMessage(instruction)
+    new SystemMessage(OS_COMMAND_SYSTEM),
+    new HumanMessage(`Instruction: ${instruction}`)
   ];
 
   const response = await llm.invoke(messages, { signal });
-  return response.content.trim();
+  const cmd = response.content.trim();
+
+  if (!cmd) throw new Error('ไม่สามารถสร้างคำสั่งได้');
+  if (cmd === 'UNSAFE') throw new Error('คำสั่งนี้มีความเสี่ยงสูง — ระบบปฏิเสธการรัน');
+
+  return cmd.replace(/^```[a-z]*\n/i, '').replace(/\n```$/i, '').trim();
 }
 
-export async function generateSearchQuery({ settings, query, apiHistory, signal }) {
+export async function generateSearchQuery({ settings, query, signal }) {
   const llm = new ChatOpenAI({
     apiKey: settings.apiKey,
     configuration: { apiKey: settings.apiKey, baseURL: settings.endpoint, dangerouslyAllowBrowser: true },
@@ -196,16 +210,27 @@ export async function generateSearchQuery({ settings, query, apiHistory, signal 
     temperature: 0.1,
   });
 
-  const recentHistory = (apiHistory || []).slice(-4).map(m =>
-    m.role === 'user' ? new HumanMessage(m.content) : new AIMessage(m.content)
-  );
+  // ✨ Prompt Search ตัวใหม่: ไม่ต้องพึ่ง History แล้ว เพราะตัวแม่ป้อน Keyword ตรงๆ มาให้เลย!
+  const SEARCH_QUERY_SYSTEM = `You are a Search Query Optimizer.
+Task: Clean and optimize the provided text for a web search engine.
+[RULES]
+1. OUTPUT ONLY THE RAW SEARCH QUERY. No quotes, no explanations.
+2. Remove conversational fillers.
+3. Keep the most relevant keywords.`;
 
   const messages = [
-    new SystemMessage(`Output ONLY the optimized search query string.`),
-    ...recentHistory,
-    new HumanMessage(`Query: ${query}`)
+    new SystemMessage(SEARCH_QUERY_SYSTEM),
+    new HumanMessage(`Raw query: "${query}"\nOptimized query:`)
   ];
 
-  const response = await llm.invoke(messages, { signal });
-  return response.content.trim();
+  try {
+    const response = await llm.invoke(messages, { signal });
+    let optimizedQuery = response.content.trim();
+    if (optimizedQuery.startsWith('"') && optimizedQuery.endsWith('"')) {
+      optimizedQuery = optimizedQuery.slice(1, -1);
+    }
+    return optimizedQuery || query;
+  } catch (err) {
+    return query;
+  }
 }
