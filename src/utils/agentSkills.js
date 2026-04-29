@@ -19,8 +19,23 @@ async function mqttPublish(args, ctx) {
   if (!mqttClient) return { success: false, error: 'MQTT not connected' }
 
   const { topic, payload } = args
+
+  // os_terminal devices are controlled exclusively by the os_command tool.
+  // Reject any attempt to reach them via mqtt_publish.
+  const terminalMatch = devicesRef.current.find(
+    d => d.type === 'os_terminal' &&
+      (d.pubTopic === topic || d.pubTopic?.endsWith('/' + topic))
+  )
+  if (terminalMatch) {
+    return {
+      success: false,
+      error: `"${terminalMatch.name}" is a terminal device — use the os_command tool instead of mqtt_publish`,
+    }
+  }
+
   const device = devicesRef.current.find(
-    d => d.pubTopic === topic || d.pubTopic?.endsWith('/' + topic)
+    d => d.type !== 'os_terminal' &&
+      (d.pubTopic === topic || d.pubTopic?.endsWith('/' + topic))
   )
 
   let finalTopic = topic;
@@ -64,9 +79,12 @@ async function mqttRead(args, ctx) {
   const topic = typeof args === 'string' ? args.trim() : args?.topic
   if (!topic) return { success: false, error: 'No topic specified' }
 
+  // os_terminal devices are write-only via os_command — not readable here
   const device = devicesRef.current.find(
-    d => d.pubTopic === topic || d.subTopic === topic ||
+    d => d.type !== 'os_terminal' && (
+      d.pubTopic === topic || d.subTopic === topic ||
       d.pubTopic?.endsWith('/' + topic) || d.subTopic?.endsWith('/' + topic)
+    )
   )
 
   if (!device) return { success: false, error: `No device found for topic: ${topic}` }

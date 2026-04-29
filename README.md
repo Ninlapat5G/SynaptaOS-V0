@@ -72,17 +72,25 @@ Device Cards อัปเดต real-time (MQTT QoS 2)
 
 ```text
 src/
-├── App.jsx                   # Root — orchestrates state, MQTT, tools
+├── App.jsx                   # Root — wires hooks together, renders pages (~250 lines)
 ├── data.js                   # ค่าเริ่มต้น (devices, settings, areas, tweaks)
 ├── index.css                 # Tailwind + ระบบ theme (dark/light, oklch)
+│
 ├── hooks/
-│   ├── useMQTT.js            # MQTT connection, publish, sensorCache, waitForMessage
-│   └── useChat.js            # Chat messages, agent loop, streaming, history limit
+│   ├── useSettings.js        # Settings state + localStorage + baseTopicRef
+│   ├── useDevices.js         # Device list + MQTT→state sync + removeDevice
+│   ├── useAreas.js           # Room filter list + editor UI state
+│   ├── useMQTT.js            # MQTT client, publish, waitForMessage, waitForStream
+│   └── useChat.js            # Chat state, runAgent call, streaming, abort
+│
 ├── utils/
-│   ├── agent.js              # LangGraph ReAct graph + LLM client + OS/search sub-agents
-│   ├── agentSkills.js        # Skill handlers (mqtt_publish, mqtt_read, os_command, web_search)
+│   ├── agent.js              # LangGraph ReAct graph + LLM client + sub-agents
+│   │                         # Sub-agents: generateOsCommand, generateSearchQuery
+│   ├── agentSkills.js        # Tool handlers ← เพิ่ม skill ใหม่ที่นี่
+│   │                         # (mqtt_publish, mqtt_read, os_command, web_search)
 │   ├── mqttTopic.js          # normalizeBase / buildFullTopic helpers
 │   └── storage.js            # localStorage helpers
+│
 └── components/
     ├── ui/
     │   ├── Icon.jsx
@@ -102,6 +110,33 @@ build_com_agent/
 ├── terminal_agent.py         # Python MQTT agent รับคำสั่งแล้วรัน terminal จริงบนเครื่อง
 └── terminal_agent.exe        # Pre-built binary สำหรับ Windows
 ```
+
+### วิธีเพิ่ม Skill ใหม่
+
+1. **เขียน handler** ใน `src/utils/agentSkills.js`:
+```js
+async function mySkill(args, ctx) {
+  // ctx = { mqttClient, settings, devicesRef, baseTopicRef, setDevices, ... }
+  return { success: true, result: '...' }
+}
+```
+
+2. **ลงทะเบียน** ใน `toolHandlers`:
+```js
+const toolHandlers = { ..., my_skill: mySkill }
+```
+
+3. **เพิ่ม schema** ใน `DEFAULT_SETTINGS.skills` (`src/data.js`):
+```js
+{
+  id: 'my_skill', name: 'my_skill',
+  description: 'What this tool does (seen by the LLM)',
+  enabled: true,
+  schema: '{"type":"object","properties":{"param":{"type":"string"}},"required":["param"]}',
+}
+```
+
+ไม่ต้องแตะไฟล์อื่น — agent จะเห็น skill ใหม่ทันที
 
 ---
 
@@ -213,12 +248,14 @@ npm run build    # production build
 
 ## Skills (Built-in)
 
-| Skill | หน้าที่ | ต้องการ |
-|---|---|---|
-| `mqtt_publish` | publish payload ไปยัง device topic | MQTT |
-| `mqtt_read` | อ่านค่าล่าสุดจาก sensor topic | MQTT |
-| `os_command` | แปลภาษาคนเป็น terminal command แล้วส่งไปยัง os_terminal device | MQTT |
-| `web_search` | ค้นหาข้อมูลผ่าน Serper API · ผลดิบส่งตรงไปยัง agent context | Serper API Key |
+| Skill | หน้าที่ | มองเห็น device ประเภท | ต้องการ |
+|---|---|---|---|
+| `mqtt_publish` | publish payload ไปยัง device topic | digital, analog เท่านั้น | MQTT |
+| `mqtt_read` | อ่านค่าล่าสุดจาก sensor topic | digital, analog เท่านั้น | MQTT |
+| `os_command` | แปลภาษาคนเป็น terminal command แล้วส่งผ่าน MQTT | os_terminal เท่านั้น | MQTT |
+| `web_search` | ค้นหาข้อมูลผ่าน Serper API · ผลดิบส่งตรงไปยัง agent context | — | Serper API Key |
+
+> **การแยก terminal ออกจาก mqtt_publish:** `mqtt_publish` และ `mqtt_read` จะ**ไม่เห็น** os_terminal device เลย — ถ้า AI พยายาม publish ตรงไปที่ terminal topic จะได้รับ error และถูกบอกให้ใช้ `os_command` แทน ป้องกันการส่งคำสั่ง raw ข้ามไปยัง terminal agent
 
 เปิด/ปิด skill ได้ที่ Settings → Section 03 — skill ที่ปิดจะถูกบล็อกทั้งจาก tool list ที่ LLM เห็น และที่ชั้น execution ดังนั้น tool ที่ disabled จะไม่ทำงานได้แม้ในกรณี prompt injection
 
@@ -240,7 +277,9 @@ terminal_agent.exe office-pc
 ```
 
 - subscribe topic `Mylab/smarthome/{computer_name}/cmd`
-- รัน command จริงด้วย `subprocess.getoutput()`
+- รัน command จริงด้วย `subprocess.Popen` (streaming ทีละบรรทัด)
+- ส่ง output ทีละบรรทัดผ่าน MQTT → แอปรับทีละ chunk จนครบ → ส่งทั้งหมดให้ agent ในที
+- ส่ง `(mqtt_end)` เสมอเมื่อ command จบ (รวมถึงกรณี error)
 - รองรับ `cd` (อัปเดต working directory จริง)
 - publish output กลับที่ `Mylab/smarthome/{computer_name}/output`
 - เชื่อมต่อด้วย TLS (port 8883)

@@ -1,13 +1,17 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 
-import { initialDevices, DEFAULT_SETTINGS, INITIAL_AREAS, INITIAL_TWEAKS } from './data'
-import { saveSettings, loadSettings, saveDevices, loadDevices, saveAreas, loadAreas, clearAll } from './utils/storage'
+import { INITIAL_TWEAKS } from './data'
+import { clearAll } from './utils/storage'
 import { normalizeBase, buildFullTopic } from './utils/mqttTopic'
 import { generateOsCommand } from './utils/agent'
 import { createExecuteTool } from './utils/agentSkills'
+
 import { useMQTT } from './hooks/useMQTT'
 import { useChat } from './hooks/useChat'
+import { useSettings } from './hooks/useSettings'
+import { useDevices } from './hooks/useDevices'
+import { useAreas } from './hooks/useAreas'
 
 import Nav, { MobileTopbar, MobileBottomNav } from './components/Nav'
 import DeviceCard, { AddDeviceTile, AddTerminalTile } from './components/DeviceCard'
@@ -38,59 +42,12 @@ export default function App() {
   useEffect(() => { localStorage.setItem('sh-page', page) }, [page])
 
   // ── Settings ──────────────────────────────────────────────────────────────────
-  const [settings, setSettings] = useState(() => {
-    const saved = loadSettings()
-    if (!saved) return DEFAULT_SETTINGS
-    const savedIds = new Set((saved.skills || []).map(s => s.id))
-    const mergedSkills = [
-      ...(saved.skills || []),
-      ...DEFAULT_SETTINGS.skills.filter(s => !savedIds.has(s.id)),
-    ]
-    return { ...DEFAULT_SETTINGS, ...saved, mqtt: { ...DEFAULT_SETTINGS.mqtt, ...saved.mqtt }, skills: mergedSkills }
-  })
-
-  const handleSaveSettings = useCallback(s => {
-    setSettings(s)
-    saveSettings(s)
-  }, [])
+  const { settings, handleSaveSettings, baseTopicRef } = useSettings()
 
   // ── Devices ───────────────────────────────────────────────────────────────────
-  const [devices, setDevices] = useState(() => loadDevices() ?? initialDevices)
-  const devicesRef = useRef(devices)
-  useEffect(() => { devicesRef.current = devices }, [devices])
-  useEffect(() => { saveDevices(devices) }, [devices])
+  const { devices, setDevices, devicesRef, handleMqttMessage, removeDevice } = useDevices({ baseTopicRef })
 
-  // ── Areas ─────────────────────────────────────────────────────────────────────
-  const [areas, setAreas] = useState(() => loadAreas() ?? INITIAL_AREAS)
-  const [activeArea, setActiveArea] = useState('All')
-  const [editAreas, setEditAreas] = useState(false)
-  const [newArea, setNewArea] = useState('')
-  useEffect(() => { saveAreas(areas) }, [areas])
-
-  // ── MQTT baseTopic ref ────────────────────────────────────────────────────────
-  const baseTopicRef = useRef(settings.mqtt.baseTopic)
-  useEffect(() => { baseTopicRef.current = settings.mqtt.baseTopic }, [settings.mqtt.baseTopic])
-
-  // ── MQTT message sync ─────────────────────────────────────────────────────────
-  const handleMqttMessage = useCallback((topic, val) => {
-    const base = normalizeBase(baseTopicRef.current)
-    const incoming = topic.trim()
-
-    setDevices(prev => {
-      let matched = false
-      const next = prev.map(d => {
-        if (incoming !== buildFullTopic(d.subTopic, base) &&
-          incoming !== buildFullTopic(d.pubTopic, base)) return d
-        matched = true
-        if (d.type === 'digital') return { ...d, on: val === 'true' || val === '1' || val === 'on' || val === 'ON' }
-        if (d.type === 'analog') return { ...d, value: Math.max(0, Math.min(d.max ?? 255, parseInt(val, 10) || 0)) }
-        return d
-      })
-      return matched ? next : prev
-    })
-  }, [])
-
-  // ── MQTT hook ─────────────────────────────────────────────────────────────────
+  // ── MQTT ──────────────────────────────────────────────────────────────────────
   const { client: mqttClient, status: mqttStatus, sensorCache, publish: mqttPublish,
     waitForMessage: mqttWaitForMessage, waitForStream: mqttWaitForStream } = useMQTT({
     broker: settings.mqtt.broker,
@@ -99,18 +56,17 @@ export default function App() {
     onMessage: handleMqttMessage,
   })
 
-  // ── Device update ─────────────────────────────────────────────────────────────
+  // ── Areas ─────────────────────────────────────────────────────────────────────
+  const { areas, setAreas, activeArea, setActiveArea, editAreas, setEditAreas, newArea, setNewArea } = useAreas()
+
+  // ── Device update (needs both setDevices + mqttPublish → stays here) ──────────
   const updateDevice = useCallback((next, isFinal = true) => {
     setDevices(prev => prev.map(d => d.id === next.id ? next : d))
     if (isFinal && next.pubTopic) {
       const payload = next.type === 'digital' ? (next.on ? 'true' : 'false') : String(next.value)
       mqttPublish(next.pubTopic, payload)
     }
-  }, [mqttPublish])
-
-  const removeDevice = useCallback(id => {
-    setDevices(prev => prev.filter(x => x.id !== id))
-  }, [])
+  }, [mqttPublish, setDevices])
 
   // ── Tool executor ─────────────────────────────────────────────────────────────
   const executeTool = useCallback(
@@ -122,7 +78,7 @@ export default function App() {
     [mqttClient, sensorCache, settings, mqttWaitForMessage, mqttWaitForStream]
   )
 
-  // ── Raw MQTT publish ──────────────────────────────────────────────────────────
+  // ── Raw MQTT publish (used by DeviceCard terminal widget) ─────────────────────
   const handleRawPublish = useCallback((topic, payload) => {
     if (!mqttClient || !topic) return
     const base = normalizeBase(baseTopicRef.current)
@@ -130,7 +86,7 @@ export default function App() {
     mqttClient.publish(fullTopic, String(payload), { qos: 2 })
   }, [mqttClient])
 
-  // ── Chat hook ─────────────────────────────────────────────────────────────────
+  // ── Chat ──────────────────────────────────────────────────────────────────────
   const { messages, thinking, executing, sendMessage, clearChat, stopChat } = useChat({
     settings,
     devicesRef,
@@ -147,41 +103,37 @@ export default function App() {
     root.style.setProperty('--accent-c', tweaks.accentChroma)
   }, [tweaks])
 
-  // ── Offline detection ─────────────────────────────────────────────────────────
+  // ── Offline toast ─────────────────────────────────────────────────────────────
   useEffect(() => {
     const showToast = (type, text) => {
       setToast({ type, text })
       setTimeout(() => setToast(null), type === 'error' ? 5000 : 3000)
     }
     const onOffline = () => showToast('error', 'ออฟไลน์ — ไม่สามารถควบคุมอุปกรณ์ได้')
-    const onOnline = () => showToast('ok', 'เชื่อมต่ออินเตอร์เน็ตแล้ว')
+    const onOnline  = () => showToast('ok',    'เชื่อมต่ออินเตอร์เน็ตแล้ว')
     window.addEventListener('offline', onOffline)
-    window.addEventListener('online', onOnline)
+    window.addEventListener('online',  onOnline)
     return () => {
       window.removeEventListener('offline', onOffline)
-      window.removeEventListener('online', onOnline)
+      window.removeEventListener('online',  onOnline)
     }
   }, [])
 
-  const handleClearAll = useCallback(() => {
-    clearAll()
-    window.location.reload()
-  }, [])
+  const handleClearAll = useCallback(() => { clearAll(); window.location.reload() }, [])
 
-  // ── Stats ─────────────────────────────────────────────────────────────────────
-  const activeCount = devices.filter(d => d.type === 'digital' ? d.on : d.value > 0).length
+  // ── Derived stats ─────────────────────────────────────────────────────────────
+  const activeCount  = devices.filter(d => d.type === 'digital' ? d.on : d.value > 0).length
   const analogDevices = devices.filter(d => d.type === 'analog')
-  const analogAvg = analogDevices.length
+  const analogAvg    = analogDevices.length
     ? Math.round(analogDevices.reduce((a, d) => a + d.value, 0) / analogDevices.length)
     : 0
-  const roomCount = new Set(devices.map(d => d.room)).size
-  const skillCount = (settings.skills || []).filter(s => s.enabled).length
-  const modelShort = (settings.model || 'typhoon-v2').split('-instruct')[0]
-
+  const roomCount    = new Set(devices.map(d => d.room)).size
+  const skillCount   = (settings.skills || []).filter(s => s.enabled).length
+  const modelShort   = (settings.model || 'typhoon-v2').split('-instruct')[0]
   const visibleDevices = devices.filter(d => activeArea === 'All' || d.room === activeArea)
+  const mqttUnhealthy  = mqttStatus === 'reconnecting' || mqttStatus === 'error'
 
-  const mqttUnhealthy = mqttStatus === 'reconnecting' || mqttStatus === 'error'
-
+  // ── Render ────────────────────────────────────────────────────────────────────
   return (
     <div className="sh-app">
       <MobileTopbar
