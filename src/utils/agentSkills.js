@@ -1,6 +1,6 @@
 // ── Skill Tool Handlers ────────────────────────────────────────────────────────
 // Each handler: async (args, ctx) => result
-// ctx = { mqttClient, sensorCache, settings, mqttWaitForMessage,
+// ctx = { mqttClient, settings, mqttWaitForMessage,
 //          devicesRef, baseTopicRef, setDevices,
 //          normalizeBase, buildFullTopic, generateOsCommand }
 //
@@ -20,22 +20,40 @@ async function mqttPublish(args, ctx) {
   const device = devicesRef.current.find(
     d => d.pubTopic === topic || d.pubTopic?.endsWith('/' + topic)
   )
-  const rawTopic = device ? device.pubTopic : topic
+
+  // ✨ ปลดล็อคความล้ำ: ถ้าหาไม่เจอในลิสต์ ให้ถือว่าเป็น Raw Topic ยิงสดไปเลย!
+  let finalTopic = topic;
+  let isRaw = false;
+
+  if (!device) {
+    isRaw = true;
+  } else {
+    finalTopic = device.pubTopic;
+  }
+
   const base = normalizeBase(baseTopicRef.current)
-  const fullTopic = buildFullTopic(rawTopic, base)
+  const fullTopic = buildFullTopic(finalTopic, base)
 
   return new Promise(resolve => {
     mqttClient.publish(fullTopic, String(payload), { qos: 2 }, err => {
       if (err) { resolve({ success: false, error: err.message }); return }
+
+      // อัปเดต UI เฉพาะของที่มีในลิสต์
       if (device) {
         setDevices(prev => prev.map(d => {
           if (d.id !== device.id) return d
-          if (d.type === 'digital') return { ...d, on: payload === 'true' }
+          if (d.type === 'digital') return { ...d, on: payload === 'true' || payload === 'ON' || payload === '1' }
           if (d.type === 'analog') return { ...d, value: parseInt(payload, 10) || 0 }
           return d
         }))
       }
-      resolve({ success: true, topic: fullTopic, payload, message: 'Published.' })
+
+      resolve({
+        success: true,
+        topic: fullTopic,
+        payload,
+        message: isRaw ? 'Published to unlisted raw topic.' : 'Published.'
+      })
     })
   })
 }
@@ -48,7 +66,7 @@ async function mqttRead(args, ctx) {
 
   const device = devicesRef.current.find(
     d => d.pubTopic === topic || d.subTopic === topic ||
-         d.pubTopic?.endsWith('/' + topic) || d.subTopic?.endsWith('/' + topic)
+      d.pubTopic?.endsWith('/' + topic) || d.subTopic?.endsWith('/' + topic)
   )
 
   if (!device) return { success: false, error: `No device found for topic: ${topic}` }
@@ -131,7 +149,6 @@ async function webSearch(args, ctx) {
   if (data.knowledgeGraph?.description)
     parts.push(`${data.knowledgeGraph.title}: ${data.knowledgeGraph.description}`)
 
-  // ✨ ลดเหลือ 3 อัน ป้องกันปัญหา Context ล้น
   const organic = (data.organic || []).slice(0, 3)
   if (organic.length)
     parts.push(organic.map(r => `${r.title}\n${r.snippet}\n${r.link}`).join('\n\n'))

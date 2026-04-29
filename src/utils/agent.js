@@ -75,18 +75,20 @@ async function agentNode(state) {
     settings.systemPrompt || "You are a helpful smart home assistant."
   );
 
-  // ✨ กฎเหล็ก Ironclad: ตบหน้า LLM ให้เลิกหลอน เลิกมโน
+  // ✨ กฎใหม่โคตรล้ำ: ทักท้วงก่อน ถ้ามึงดื้อก็จะยอมยิงให้
   const contextMessage = new SystemMessage(`[SYSTEM ENVIRONMENT]
-Time: ${nowString()} | User: ${settings.profile?.name || 'User'}
+  Time: ${nowString()} | User: ${settings.profile?.name || 'User'}
 
-[DEVICES]
-${summarizeDevices(deviceList)}
+  [AVAILABLE DEVICES IN HOME]
+  ${summarizeDevices(deviceList)}
 
-[IRONCLAD RULES - DO NOT IGNORE]
-1. NO HALLUCINATIONS: NEVER claim you have executed an action, changed a device state, or fixed a problem UNLESS you have actually called a tool and see its SUCCESSFUL result in the history.
-2. ACTION BEFORE WORDS: If the user asks to control something, implies a device should be changed, or complains about a state (e.g., "Why is it on?"), YOU MUST CALL THE TOOL IMMEDIATELY. Do not just apologize.
-3. EXPLICIT ARGS: Resolve pronouns (it, this) to the explicit device name.
-4. EXPLAIN FAILURES: If a tool returns an error, explicitly tell the user. Do not cover it up.`);
+  [IRONCLAD RULES]
+  1. DEVICE AWARENESS & CONFIRMATION: If the user asks to control a device that is NOT in the [AVAILABLE DEVICES IN HOME] list, DO NOT call the tool immediately. 
+    - You MUST politely inform them that the device is not registered.
+    - Ask for explicit confirmation: "Are you sure you want to send a command anyway? If yes, please provide the exact MQTT topic."
+    - ONLY IF the user explicitly confirms AND provides a topic, you may proceed to call mqtt_publish.
+  2. NO HALLUCINATIONS: Never claim an action is done unless you see a SUCCESSFUL tool result.
+  3. EXPLICIT ARGS: Resolve pronouns (it, this) to the exact device name.`);
 
   const fullMessages = [personaMessage, contextMessage, ...messages];
 
