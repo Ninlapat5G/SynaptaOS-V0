@@ -1,6 +1,6 @@
 // ── Skill Tool Handlers ────────────────────────────────────────────────────────
 // Each handler: async (args, ctx) => result
-// ctx = { mqttClient, settings, mqttWaitForMessage,
+// ctx = { mqttClient, settings, mqttWaitForStream,
 //          devicesRef, baseTopicRef, setDevices,
 //          normalizeBase, buildFullTopic, generateOsCommand }
 //
@@ -39,7 +39,6 @@ async function mqttPublish(args, ctx) {
     mqttClient.publish(fullTopic, String(payload), { qos: 2 }, err => {
       if (err) { resolve({ success: false, error: err.message }); return }
 
-      // อัปเดต UI เฉพาะของที่มีในลิสต์
       if (device) {
         setDevices(prev => prev.map(d => {
           if (d.id !== device.id) return d
@@ -78,7 +77,7 @@ async function mqttRead(args, ctx) {
 
 async function osCommand(args, ctx) {
   const { mqttClient, settings, devicesRef, baseTopicRef,
-    mqttWaitForMessage, normalizeBase, buildFullTopic, generateOsCommand } = ctx
+    mqttWaitForStream, normalizeBase, buildFullTopic, generateOsCommand } = ctx
 
   const { instruction, os, topic, wait_output } = args
   if (!mqttClient) return { success: false, error: 'MQTT not connected' }
@@ -100,6 +99,9 @@ async function osCommand(args, ctx) {
     ? buildFullTopic(device.subTopic, base)
     : null
 
+  // Register stream listener BEFORE publishing so no early chunks are missed
+  const streamPromise = outputTopic ? mqttWaitForStream(outputTopic, 10000) : null
+
   try {
     await new Promise((resolve, reject) =>
       mqttClient.publish(fullTopic, command, { qos: 2 }, err => err ? reject(err) : resolve())
@@ -108,10 +110,17 @@ async function osCommand(args, ctx) {
     return { success: false, error: err.message }
   }
 
-  const output = outputTopic ? await mqttWaitForMessage(outputTopic, 30000) : null
+  if (!streamPromise) return { success: true, summary: `Command sent: ${command}` }
 
-  if (output != null) return { success: true, summary: `Ran: ${command}\n\n${output}` }
-  return { success: true, summary: `⚠️ No output received (timeout). Command was sent: ${command}` }
+  const { chunks, timedOut } = await streamPromise
+  const output = chunks.join('\n')
+
+  if (timedOut && chunks.length === 0) {
+    return { success: true, summary: `Command sent: ${command}\n\n⚠️ ไม่ได้รับผลลัพธ์ — terminal agent อาจออฟไลน์อยู่` }
+  }
+
+  const timeoutNote = timedOut ? '\n\n⚠️ ไม่ได้รับ (mqtt_end) — terminal agent อาจขาดการเชื่อมต่อ' : ''
+  return { success: true, summary: `Ran: ${command}\n\n${output || '(no output)'}${timeoutNote}` }
 }
 
 async function webSearch(args, ctx) {

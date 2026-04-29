@@ -12,6 +12,8 @@ export function useMQTT({ broker, port, baseTopic, onMessage }) {
 
   // one-shot listeners: fullTopic → Set<resolve>
   const listenersRef = useRef(new Map())
+  // stream listeners: fullTopic → { chunks, resolve, timer, idleTimeoutMs }
+  const streamHandlersRef = useRef(new Map())
 
   useEffect(() => {
     if (!broker) { setStatus('offline'); return }
@@ -54,10 +56,27 @@ export function useMQTT({ broker, port, baseTopic, onMessage }) {
         const val = message.toString()
         setSensorCache(prev => prev[topic] === val ? prev : { ...prev, [topic]: val })
         onMessageRef.current?.(topic, val)
+
         const resolvers = listenersRef.current.get(topic)
         if (resolvers?.size) {
           resolvers.forEach(resolve => resolve(val))
           listenersRef.current.delete(topic)
+        }
+
+        const sh = streamHandlersRef.current.get(topic)
+        if (sh) {
+          if (val === '(mqtt_end)') {
+            clearTimeout(sh.timer)
+            streamHandlersRef.current.delete(topic)
+            sh.resolve({ chunks: sh.chunks, timedOut: false })
+          } else {
+            sh.chunks.push(val)
+            clearTimeout(sh.timer)
+            sh.timer = setTimeout(() => {
+              streamHandlersRef.current.delete(topic)
+              sh.resolve({ chunks: sh.chunks, timedOut: true })
+            }, sh.idleTimeoutMs)
+          }
         }
       })
     } catch (err) {
@@ -69,6 +88,21 @@ export function useMQTT({ broker, port, baseTopic, onMessage }) {
       if (c) { c.end(); setClient(null); setStatus('offline') }
     }
   }, [broker, port, baseTopic])
+
+  const waitForStream = useCallback((fullTopic, idleTimeoutMs = 10000) => {
+    return new Promise(resolve => {
+      const handler = {
+        chunks: [],
+        idleTimeoutMs,
+        resolve,
+        timer: setTimeout(() => {
+          streamHandlersRef.current.delete(fullTopic)
+          resolve({ chunks: [], timedOut: true })
+        }, idleTimeoutMs),
+      }
+      streamHandlersRef.current.set(fullTopic, handler)
+    })
+  }, [])
 
   const waitForMessage = useCallback((fullTopic, timeoutMs = 10000) => {
     return new Promise(resolve => {
@@ -91,5 +125,5 @@ export function useMQTT({ broker, port, baseTopic, onMessage }) {
     return fullTopic
   }, [client, baseTopic])
 
-  return { client, status, sensorCache, publish, waitForMessage }
+  return { client, status, sensorCache, publish, waitForMessage, waitForStream }
 }
