@@ -40,7 +40,7 @@
 │    │  กลับให้ agent       │              │
 │    └──────────────────────┘              │
 │                                          │
-│    ไม่มี tool calls → END               │
+│    ไม่มี tool calls → END (ตอบ user)    │
 │    (stream คำตอบให้ user ทันที)          │
 └──────────────────────────────────────────┘
        │
@@ -60,9 +60,8 @@ Device Cards อัปเดต real-time (MQTT QoS 2)
 | Markdown | `react-markdown` — AI responses render bold, lists, code blocks, clickable links |
 | IoT Protocol | MQTT over WebSocket — `mqtt.js` v5 · **QoS 2** · auto-reconnect |
 | AI / LLM | OpenAI-compatible API · รองรับ Typhoon, OpenAI, OpenRouter, Ollama และทุก provider ที่ใช้ `/chat/completions` |
-| Agent Engine | **LangGraph** (`@langchain/langgraph`) — ReAct loop: agent ↔ tools · max 3 rounds |
+| Agent Engine | **LangGraph** (`@langchain/langgraph`) — ReAct loop: agent ↔ tools |
 | LLM Client | `@langchain/openai` + `@langchain/core` |
-| QR Code | `qrcode` (generate) + `jsqr` (scan) — Share Configuration via QR |
 | Voice | Web Speech API (Chrome/Edge) |
 | Storage | `localStorage` — ไม่มี backend |
 | Deployment | Vercel (static site) |
@@ -167,7 +166,7 @@ npm run build    # production build
 | 03 Skills | เปิด/ปิด tool หรือเพิ่ม custom tool พร้อม JSON Schema |
 | 04 Integrations | Serper API Key สำหรับ web_search skill |
 | 05 MQTT Broker | URL · Port · Base Topic · สถานะการเชื่อมต่อ |
-| 06 Share Configuration | Copy/Paste JSON หรือ **QR Code** เพื่อย้าย config ข้ามเครื่อง |
+| 06 Share Configuration | Copy/Paste JSON เพื่อย้าย config ข้ามเครื่อง |
 | 07 Data | ปุ่ม Clear all local data |
 
 ---
@@ -187,13 +186,12 @@ npm run build    # production build
 ### Tools Node
 
 - รัน tool calls **พร้อมกันทั้งหมด** (Promise.all) — ไม่รอทีละตัว
-- UI แสดง ToolPill แต่ละตัวพร้อม label `R1` / `R2` บอก round
+- UI แสดง ToolPill แต่ละตัวพร้อม label `R1` / `R2` / ... บอก round
 - ผล tool ถูกแปลงเป็น `ToolMessage` และส่งกลับเข้า agent node เพื่อ reasoning ต่อ
 
-### ReAct Loop Control
+### ReAct Loop
 
 - หลัง tools รัน agent จะ reason ต่อว่า "ครบหรือยัง?" — ถ้ายังขาดอยู่จะเรียก tool รอบใหม่
-- ลิมิต **สูงสุด 3 รอบ** — กันลูปวนไม่จบ
 - tool ที่ disabled จะถูกบล็อกทั้งที่ชั้น tool list (LLM ไม่เห็น) และที่ชั้น execution
 
 ### Sub-Agents (ไม่ขึ้น Graph)

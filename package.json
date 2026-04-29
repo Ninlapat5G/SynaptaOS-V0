@@ -13,9 +13,7 @@
     "@langchain/langgraph": "^1.2.9",
     "@langchain/openai": "^1.4.5",
     "framer-motion": "^11.11.17",
-    "jsqr": "^1.4.0",
     "mqtt": "^5.10.1",
-    "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^10.1.0"
