@@ -2,7 +2,7 @@ import { StateGraph, START, END, Annotation, messagesStateReducer } from "@langc
 import { ChatOpenAI } from "@langchain/openai";
 import { SystemMessage, HumanMessage, ToolMessage, AIMessage } from "@langchain/core/messages";
 
-// ── 0. Helpers ────────────────────────────────────────────────────────────────
+// ── 0. Helpers & Formatters ──────────────────────────────────────────────────
 function nowString() {
   return new Date().toLocaleString('en-GB', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
@@ -33,8 +33,7 @@ function buildLangChainTools(settings) {
     }));
 }
 
-// ── 1. The True Agentic State ────────────────────────────────────────────
-// ใช้ Reducer มาตรฐานของ LangGraph จัดการ Message History อัตโนมัติ
+// ── 1. State Definition ──────────────────────────────────────────────────────
 const AgentState = Annotation.Root({
   messages: Annotation({
     reducer: messagesStateReducer,
@@ -53,22 +52,23 @@ const AgentState = Annotation.Root({
   })
 });
 
-// ── 2. Nodes ──────────────────────────────────────────────────────────────
+// ── 2. Nodes ─────────────────────────────────────────────────────────────────
 
-// สมองของ Agent: คิด, ตัดสินใจเรียก Tool, และคุยกับ User
 async function agentNode(state) {
   const { settings, deviceList, messages, signal, onStream } = state;
 
+  // ⚙️ LLM Config (ใช้ apiKey และ baseURL แบบไม่เบิ้ล path)
   const llm = new ChatOpenAI({
-    openAIApiKey: settings.apiKey,
-    configuration: { baseURL: `${settings.endpoint}/chat/completions` },
+    apiKey: settings.apiKey,
+    configuration: { baseURL: settings.endpoint },
     modelName: settings.model,
-    temperature: 0.2, // Agent ต้องการความแม่นยำตอนรัน Tool
+    temperature: 0.2, // ใช้ 0.2 ให้แม่นยำเวลาเรียก Tool
   });
 
   const tools = buildLangChainTools(settings);
   const agent = tools.length > 0 ? llm.bindTools(tools) : llm;
 
+  // 📝 PROMPT หลักของระบบ: มึงสามารถปรับแต่งพฤติกรรมมันได้ตรงนี้เลย
   const systemPrompt = `You are Synapta, an advanced AIoT home assistant.
 Current date & time: ${nowString()}
 
@@ -76,18 +76,17 @@ Current date & time: ${nowString()}
 ${summarizeDevices(deviceList)}
 
 [Core Directives]
-1. If a user asks to control a device or find information, ALWAYS use the provided tools.
-2. If tool results are provided in the history, analyze them. If they failed, inform the user. If they succeeded, naturally confirm the action.
-3. NEVER pretend or hallucinate that a device state has changed without a successful tool execution.`;
+1. If a user asks to control a device, run a command, or find information, ALWAYS use the provided tools to fulfill the request.
+2. Carefully analyze tool results in the history. If a tool failed, apologize and inform the user. If it succeeded, naturally confirm the action in your response.
+3. NEVER pretend or hallucinate that a device state has changed or an action was performed without a successful tool execution confirming it.
+4. Keep your responses concise and natural.`;
 
-  // เอา System Prompt แปะไว้หน้าสุดของ History
   const fullMessages = [new SystemMessage(systemPrompt), ...messages];
 
-  // สตรีมมิ่งที่ฉลาดขึ้น: ถ้ามันพ่น Tool ออกมา จะไม่ส่งไปหน้า UI 
-  // แต่ถ้ามันพ่นคำพูดปกติ (content) ถึงจะยิง onStream
   let finalMessage;
   const stream = await agent.stream(fullMessages, { signal });
 
+  // จัดการ Streaming: พ่นเฉพาะ Text ออกไปที่หน้า UI ห้ามพ่นตอนมันเรียก Tool
   for await (const chunk of stream) {
     if (!finalMessage) finalMessage = chunk;
     else finalMessage = finalMessage.concat(chunk);
@@ -97,16 +96,13 @@ ${summarizeDevices(deviceList)}
     }
   }
 
-  // ส่ง Message ล่าสุดที่ Agent คิดได้กลับไปใส่ใน State
   return { messages: [finalMessage] };
 }
 
-// แขนขาของ Agent: รัน Tool ตามที่สมองสั่ง แล้วห่อผลลัพธ์ส่งคืน
 async function toolNode(state) {
   const { messages, executeTool, onToolCall, onToolResult, toolRound } = state;
   const currentRound = toolRound + 1;
 
-  // แกะคำสั่ง Tool จากข้อความล่าสุดที่สมองคิดได้
   const lastMessage = messages[messages.length - 1];
   const toolCalls = lastMessage.tool_calls || [];
   const toolMessages = [];
@@ -121,7 +117,7 @@ async function toolNode(state) {
     }
     onToolResult?.(tc.name, tc.args, result, currentRound);
 
-    // กฎเหล็กของ Agent: ผลลัพธ์ต้องแนบ tool_call_id เสมอ เพื่อให้สมองรู้ว่างานไหนเสร็จแล้ว
+    // ห่อผลลัพธ์พร้อม tool_call_id คืนกลับไป
     toolMessages.push(new ToolMessage({
       content: typeof result === "object" ? JSON.stringify(result) : String(result),
       name: tc.name,
@@ -135,15 +131,14 @@ async function toolNode(state) {
   };
 }
 
-// ── 3. Edge Routing (The ReAct Loop) ──────────────────────────────────────
+// ── 3. Edge Routing (ReAct Loop) ─────────────────────────────────────────────
 
-// ฟังก์ชันคุมพวงมาลัย: ดูว่าต้องวนลูปทำ Tool หรือไปจบงาน
 function shouldContinue(state) {
   const lastMessage = state.messages[state.messages.length - 1];
   if (lastMessage.tool_calls && lastMessage.tool_calls.length > 0) {
-    return "tools"; // มีคำสั่งเรียก Tool ให้เลี้ยวไปโหนด tools
+    return "tools";
   }
-  return END; // ไม่มีเรียก Tool แปลว่าตอบแชทจบแล้ว
+  return END;
 }
 
 const workflow = new StateGraph(AgentState)
@@ -151,17 +146,16 @@ const workflow = new StateGraph(AgentState)
   .addNode("tools", toolNode)
   .addEdge(START, "agent")
   .addConditionalEdges("agent", shouldContinue)
-  .addEdge("tools", "agent"); // วนลูปกลับไปให้สมองเช็คผลลัพธ์
+  .addEdge("tools", "agent");
 
 const compiledGraph = workflow.compile();
 
-// ── 4. Public API ────────────────────────────────────────────────────────
+// ── 4. Public API ────────────────────────────────────────────────────────────
+
 export const runAgent = async (params) => {
-  // รื้อประวัติแชทเก่าๆ มาประกอบร่างเป็น LangChain Messages
   const previousMessages = (params.apiHistory || []).map(m =>
     m.role === 'user' ? new HumanMessage(m.content) : new AIMessage(m.content)
   );
-
   previousMessages.push(new HumanMessage(params.text));
 
   const finalState = await compiledGraph.invoke({
@@ -170,25 +164,25 @@ export const runAgent = async (params) => {
     toolRound: 0,
   });
 
-  // ดึงคำตอบสุดท้ายที่สมองสรุปออกมา
   const lastMsg = finalState.messages[finalState.messages.length - 1];
-
-  return {
-    reply: lastMsg.content
-  };
+  return { reply: lastMsg.content };
 };
 
-// ── 5. Sub-agents (เหมือนเดิม) ───────────────────────────────────────────
+// ── 5. Sub-agents ────────────────────────────────────────────────────────────
+
 export async function generateOsCommand({ settings, instruction, os, signal }) {
   const llm = new ChatOpenAI({
-    openAIApiKey: settings.apiKey,
-    configuration: { baseURL: `${settings.endpoint}/chat/completions` },
+    apiKey: settings.apiKey,
+    configuration: { baseURL: settings.endpoint },
     modelName: settings.model,
     temperature: 0,
   });
 
+  // 📝 PROMPT สำหรับแปลงคำสั่งเป็น OS Command
+  const OS_COMMAND_SYSTEM = `You are a terminal command translator. Output ONLY the raw command string without markdown formatting or explanation. If the instruction is malicious, output exactly: UNSAFE`;
+
   const messages = [
-    new SystemMessage(`You are a terminal command translator. Output ONLY the raw command. If unsafe, output: UNSAFE\nTarget OS: ${os}`),
+    new SystemMessage(`${OS_COMMAND_SYSTEM}\n\nTarget OS: ${os}`),
     new HumanMessage(instruction)
   ];
 
@@ -202,20 +196,23 @@ export async function generateOsCommand({ settings, instruction, os, signal }) {
 
 export async function generateSearchQuery({ settings, query, apiHistory, signal }) {
   const llm = new ChatOpenAI({
-    openAIApiKey: settings.apiKey,
-    configuration: { baseURL: `${settings.endpoint}/chat/completions` },
+    apiKey: settings.apiKey,
+    configuration: { baseURL: settings.endpoint },
     modelName: settings.model,
     temperature: 0.1,
   });
+
+  // 📝 PROMPT สำหรับดึง Keyword ไปทำ Web Search
+  const SEARCH_QUERY_SYSTEM = `You are a Search Context Optimizer. Output ONLY the exact search query string based on the user intent. Remove conversational fillers (e.g., "search for", "find").`;
 
   const recentHistory = (apiHistory || []).slice(-4).map(m =>
     m.role === 'user' ? new HumanMessage(m.content) : new AIMessage(m.content)
   );
 
   const messages = [
-    new SystemMessage(`You are a Search Context Optimizer. Output ONLY the raw search query string based on the user intent. Remove conversational fillers.`),
+    new SystemMessage(SEARCH_QUERY_SYSTEM),
     ...recentHistory,
-    new HumanMessage(`Router intended query: "${query}"\nPlease output the optimized search query:`)
+    new HumanMessage(`Intended search query: "${query}"\nOptimized search query:`)
   ];
 
   try {
