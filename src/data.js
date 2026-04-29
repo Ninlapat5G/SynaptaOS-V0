@@ -32,13 +32,6 @@ export const DEFAULT_SETTINGS = {
   serperApiKey: '',
   skills: [
     {
-      id: 'sensor_read',
-      name: 'mqtt_read',
-      description: 'Read the latest value from a connected sensor via MQTT topic.',
-      enabled: false,
-      schema: '{"type":"object","properties":{"topic":{"type":"string"}},"required":["topic"]}',
-    },
-    {
       id: 'mqtt_pub',
       name: 'mqtt_publish',
       description: 'Publish a raw payload to an MQTT topic to control a device.',

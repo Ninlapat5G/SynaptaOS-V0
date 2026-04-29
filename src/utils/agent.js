@@ -83,7 +83,7 @@ function createGraph({ nodes, edges, entry }) {
 
 function buildTools(settings) {
   return (settings.skills || [])
-    .filter(sk => sk.enabled && sk.name !== 'mqtt_read')
+    .filter(sk => sk.enabled)
     .map(sk => {
       let parameters = { type: 'object', properties: {} }
       try { const p = JSON.parse(sk.schema); if (p?.type === 'object') parameters = p } catch { }
@@ -201,10 +201,6 @@ mqtt_publish — call when the user intends to change a device state. Infer inte
   - Direct intents: "turn on the lamp", "ปิดไฟ", "dim to 50%"
   - Indirect intents: "it's too dark" (implies turn on light), "I'm freezing" (implies turn on heater/turn off AC)
   Rule: use the EXACT pubTopic from the device list. Digital payload = "true"/"false". Analog payload = number string 0–max.
-
-mqtt_read — call ONLY for pure sensor devices (subTopic only, no pubTopic) to get live sensor values.
-  - Do NOT call for controllable devices — their current state is already shown in the device list above.
-  - Example valid use: temperature sensor, humidity sensor, door contact sensor with no pubTopic.
 
 os_command — call when the user wants to run a command on a remote machine AND an os_terminal device exists.
   Use the OS shown in the device list (e.g. "os_terminal (windows)") as the "os" argument — do NOT guess.

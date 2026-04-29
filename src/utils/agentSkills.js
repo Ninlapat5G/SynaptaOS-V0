@@ -141,7 +141,6 @@ async function webSearch(args, ctx) {
 
 const toolHandlers = {
   mqtt_publish: mqttPublish,
-  mqtt_read: mqttRead,
   os_command: osCommand,
   web_search: webSearch,
 }
