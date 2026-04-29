@@ -97,18 +97,19 @@ function summarizeResults(allToolResults, deviceList) {
   return allToolResults.map(r => {
     const ok = r.result?.error === undefined
     const icon = ok ? '✅' : '❌'
-    const device = deviceList?.find(d => d.pubTopic === r.args?.topic || d.subTopic === r.args?.topic)
-    const label = device ? `${device.name} (${device.room})` : r.args?.topic || r.args?.query || ''
 
     switch (r.name) {
-      case 'mqtt_publish':
+      case 'mqtt_publish': {
+        const d = deviceList?.find(d => d.pubTopic === r.args?.topic || d.subTopic === r.args?.topic)
+        const label = d ? `${d.name} (${d.room})` : r.args?.topic
         return ok
           ? `${icon} mqtt_publish → ${label} = ${r.args.payload}`
           : `${icon} mqtt_publish → ${label} failed: ${r.result.error}`
+      }
       case 'mqtt_read':
         return ok
-          ? `${icon} mqtt_read → ${label} = ${r.result.value}`
-          : `${icon} mqtt_read → ${label} failed: ${r.result.error}`
+          ? `${icon} mqtt_read → ${r.result.device} (${r.result.room}) = ${r.result.value}`
+          : `${icon} mqtt_read → ${r.args?.topic} failed: ${r.result.error}`
       case 'web_search':
         return ok
           ? `${icon} web_search [query: "${r.args?.query}"] → ${r.result.summary ?? 'got results'}`
@@ -143,20 +144,20 @@ function formatResultsForResponder(allToolResults, deviceList) {
     const ok = t.result?.error === undefined
     if (!ok) return `[${t.name}] Error: ${t.result.error}`
 
-    const device = deviceList?.find(d => d.pubTopic === t.args?.topic || d.subTopic === t.args?.topic)
-    const label = device ? `${device.name} (${device.room})` : t.args?.topic
-
     switch (t.name) {
-      case 'mqtt_publish':
-        return `[${t.name}] Set ${label} = ${t.args?.payload}`
+      case 'mqtt_publish': {
+        const d = deviceList?.find(d => d.pubTopic === t.args?.topic || d.subTopic === t.args?.topic)
+        const label = d ? `${d.name} (${d.room})` : t.args?.topic
+        return `[mqtt_publish] Set ${label} = ${t.args?.payload}`
+      }
       case 'mqtt_read':
-        return `[${t.name}] ${label} = ${t.result.value ?? 'no data'}`
+        return `[mqtt_read] ${t.result.device} (${t.result.room}) = ${t.result.value}`
       case 'web_search':
-        return `[${t.name}] Query: ${t.args?.query}\n${t.result.summary}`
+        return `[web_search] Query: ${t.args?.query}\n${t.result.summary}`
       case 'os_command':
         return t.result.summary
-          ? `[${t.name}]\n${t.result.summary}`
-          : `[${t.name}] Command executed (no output)`
+          ? `[os_command]\n${t.result.summary}`
+          : `[os_command] Command executed (no output)`
       default:
         return t.result.summary
           ? `[${t.name}] ${t.result.summary}`
@@ -197,8 +198,8 @@ Current date & time: ${nowString()}
 
 Return EMPTY (no tool calls) when the message is pure conversation: greetings, farewells, thanks, acknowledgements, questions about you as an AI, or opinions unrelated to any device.
 
-mqtt_read — call to check the current state of a device. Use the pubTopic or subTopic from the device list.
-  Returns the live value directly from the widget (no MQTT round-trip needed).
+mqtt_read — ONLY for pure sensor devices that have a subTopic but NO pubTopic (e.g. temperature, humidity, door contact sensor).
+  The current state of controllable devices (those with pubTopic) is already shown in the device list — do NOT call mqtt_read for them.
 
 mqtt_publish — call when the user intends to change a device state. Infer intent from context even without exact keywords.
   - Direct intents: "turn on the lamp", "ปิดไฟ", "dim to 50%"
@@ -344,20 +345,18 @@ async function responderNode(state) {
     ? formatResultsForResponder(allToolResults, deviceList)
     : 'None — no tools were called'
 
-  const stateSummary = allToolResults.length === 0
-    ? (deviceList || [])
-      .map(d => `- [${d.room}] ${d.name} (${d.type}): ${d.type === 'digital' ? (d.on ? 'ON' : 'OFF') : d.value}`)
-      .join('\n') || 'No devices registered'
-    : null
+  const stateSummary = (deviceList || [])
+    .map(d => `- [${d.room}] ${d.name}: ${d.type === 'digital' ? (d.on ? 'ON' : 'OFF') : `${d.value}/${d.max ?? 255}`}`)
+    .join('\n') || 'No devices registered'
 
   const systemPrompt = `${settings.systemPrompt}
 (Current date & time: ${nowString()} — use this when relevant, do not announce it unprompted.)
 
 [User Info]
-Name: "${settings.profile?.name || 'User'}"${stateSummary ? `
+Name: "${settings.profile?.name || 'User'}"
 
 [Current Home Status]
-${stateSummary}` : ''}
+${stateSummary}
 
 [Tool Results]
 ${toolContext}`
