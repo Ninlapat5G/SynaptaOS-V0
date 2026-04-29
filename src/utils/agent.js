@@ -1,6 +1,6 @@
 import { StateGraph, START, END, Annotation, messagesStateReducer } from "@langchain/langgraph";
 import { ChatOpenAI } from "@langchain/openai";
-import { SystemMessage, HumanMessage, ToolMessage, AIMessage } from "@langchain/core/messages";
+import { SystemMessage, HumanMessage, ToolMessage, AIMessage, trimMessages } from "@langchain/core/messages";
 
 // ── 0. Helpers ────────────────────────────────────────────────────────────────
 function nowString() {
@@ -55,7 +55,7 @@ const AgentState = Annotation.Root({
 // ── 2. Nodes (Main Agent) ────────────────────────────────────────────────────
 
 async function agentNode(state) {
-  const { settings, deviceList, messages, signal, onStream } = state;
+  const { settings, deviceList, messages, signal, onStream, toolRound } = state;
 
   const llm = new ChatOpenAI({
     apiKey: settings.apiKey,
@@ -65,7 +65,7 @@ async function agentNode(state) {
       dangerouslyAllowBrowser: true
     },
     modelName: settings.model,
-    temperature: 0.2,
+    temperature: toolRound === 0 ? 0.1 : 0.5,
   });
 
   const tools = buildLangChainTools(settings);
@@ -163,10 +163,18 @@ const workflow = new StateGraph(AgentState)
 const compiledGraph = workflow.compile();
 
 export const runAgent = async (params) => {
-  const previousMessages = (params.apiHistory || []).map(m =>
+  const rawMessages = (params.apiHistory || []).map(m =>
     m.role === 'user' ? new HumanMessage(m.content) : new AIMessage(m.content)
   );
-  previousMessages.push(new HumanMessage(params.text));
+  rawMessages.push(new HumanMessage(params.text));
+
+  const previousMessages = await trimMessages(rawMessages, {
+    maxTokens: 4000,
+    tokenCounter: msgs => msgs.reduce((sum, m) => sum + Math.ceil(String(m.content).length / 3), 0),
+    strategy: 'last',
+    startOn: 'human',
+    allowPartial: false,
+  });
 
   const finalState = await compiledGraph.invoke({
     ...params,

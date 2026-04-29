@@ -9,6 +9,8 @@
 //   2. Register it in toolHandlers map
 //   3. Add its definition to DEFAULT_SETTINGS.skills in data.js
 
+import { generateSearchQuery } from './agent.js'
+
 const SERPER_URL = 'https://google.serper.dev/search'
 
 async function mqttPublish(args, ctx) {
@@ -122,12 +124,17 @@ async function webSearch(args, ctx) {
   const apiKey = settings.serperApiKey
   if (!apiKey) return { success: false, error: 'Serper API key ยังไม่ได้ตั้งค่า — ไปที่ Settings → Integrations' }
 
+  let optimizedQuery = query
+  try {
+    optimizedQuery = await generateSearchQuery({ settings, query })
+  } catch { /* ใช้ query เดิมถ้า optimize ไม่ได้ */ }
+
   let res
   try {
     res = await fetch(SERPER_URL, {
       method: 'POST',
       headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ q: query, num: 5 }),
+      body: JSON.stringify({ q: optimizedQuery, num: 5 }),
     })
   } catch (err) {
     return { success: false, error: `Network error: ${err.message}` }
@@ -154,7 +161,7 @@ async function webSearch(args, ctx) {
     parts.push(organic.map(r => `${r.title}\n${r.snippet}\n${r.link}`).join('\n\n'))
 
   const summary = parts.join('\n\n') || 'No results found'
-  return { success: true, query, summary }
+  return { success: true, query: optimizedQuery, summary }
 }
 
 // ── Registry ───────────────────────────────────────────────────────────────────
