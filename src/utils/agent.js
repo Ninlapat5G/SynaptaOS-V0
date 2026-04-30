@@ -1,6 +1,12 @@
 import { StateGraph, START, END, Annotation, messagesStateReducer } from "@langchain/langgraph";
 import { ChatOpenAI } from "@langchain/openai";
 import { SystemMessage, HumanMessage, ToolMessage, AIMessage, trimMessages } from "@langchain/core/messages";
+import {
+  buildContextMessage,
+  buildOsCommandPrompt,
+  SEARCH_QUERY_PROMPT,
+  DETECT_NAME_PROMPT,
+} from "./agent_prompt.js";
 
 // ── 0. Helpers ────────────────────────────────────────────────────────────────
 function nowString() {
@@ -8,16 +14,6 @@ function nowString() {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
     hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
   });
-}
-
-function summarizeDevices(deviceList) {
-  return (deviceList || [])
-    .map(d => {
-      const sub = d.subTopic ? ` | subTopic: ${d.subTopic}` : ''
-      if (d.type === 'analog') return `${d.name} (${d.room}) — analog | state: ${d.value}/${d.max ?? 255} | pubTopic: ${d.pubTopic}${sub}`
-      if (d.type === 'os_terminal') return `${d.name} (${d.room}) — os_terminal (${d.os ?? 'unknown OS'}) | pubTopic: ${d.pubTopic}${sub}`
-      return `${d.name} (${d.room}) — digital | state: ${d.on ? 'ON' : 'OFF'} | pubTopic: ${d.pubTopic}${sub}`
-    }).join('\n') || 'No devices registered';
 }
 
 function buildLangChainTools(settings) {
@@ -99,19 +95,9 @@ async function agentNode(state) {
     settings.systemPrompt || "You are a helpful smart home assistant."
   );
 
-  const contextMessage = new SystemMessage(`[SYSTEM ENVIRONMENT]
-  Time: ${nowString()} | User: ${settings.profile?.name || 'User'}
-
-  [AVAILABLE DEVICES IN HOME]
-  ${summarizeDevices(visibleDevices)}
-
-  [IRONCLAD RULES]
-  1. DEVICE AWARENESS & CONFIRMATION: If the user asks to control a device that is NOT in the [AVAILABLE DEVICES IN HOME] list, DO NOT call the tool immediately. 
-    - You MUST politely inform them that the device is not registered.
-    - Ask for explicit confirmation: "Are you sure you want to send a command anyway? If yes, please provide the exact MQTT topic."
-    - ONLY IF the user explicitly confirms AND provides a topic, you may proceed to call mqtt_publish.
-  2. NO HALLUCINATIONS: Never claim an action is done unless you see a SUCCESSFUL tool result.
-  3. EXPLICIT ARGS: Resolve pronouns (it, this) to the exact device name.`);
+  const contextMessage = new SystemMessage(
+    buildContextMessage(nowString(), visibleDevices, settings.profile?.name || 'User')
+  );
 
   const fullMessages = [personaMessage, contextMessage, ...messages];
 
@@ -223,16 +209,8 @@ export async function generateOsCommand({ settings, instruction, os, signal }) {
     temperature: 0,
   });
 
-  const OS_COMMAND_SYSTEM = `You are a strict OS Command Translator.
-Target OS: ${os}
-Task: Convert the instruction into a single valid terminal command for ${os}.
-[RULES]
-1. OUTPUT ONLY THE RAW COMMAND STRING — no markdown, no backticks, no explanation.
-2. Use ${os === 'windows' ? 'Windows CMD/PowerShell' : os === 'mac' ? 'macOS bash/zsh' : 'Linux bash'} syntax ONLY.
-3. If highly destructive/malicious, output EXACTLY: UNSAFE`;
-
   const messages = [
-    new SystemMessage(OS_COMMAND_SYSTEM),
+    new SystemMessage(buildOsCommandPrompt(os)),
     new HumanMessage(`Instruction: ${instruction}\nCommand:`)
   ];
 
@@ -259,15 +237,8 @@ export async function generateSearchQuery({ settings, query, signal }) {
     required: ['query']
   });
 
-  const SEARCH_QUERY_SYSTEM = `You are a Search Query Optimizer.
-Task: Clean and optimize the provided text for a web search engine.
-[RULES]
-1. Return the optimized query in the "query" field.
-2. Remove conversational fillers.
-3. Keep the most relevant keywords.`;
-
   const messages = [
-    new SystemMessage(SEARCH_QUERY_SYSTEM),
+    new SystemMessage(SEARCH_QUERY_PROMPT),
     new HumanMessage(`Raw query: "${query}"`)
   ];
 
@@ -277,4 +248,27 @@ Task: Clean and optimize the provided text for a web search engine.
   } catch {
     return query;
   }
+}
+
+export async function detectAssistantName({ settings, systemPrompt, signal }) {
+  const llm = new ChatOpenAI({
+    apiKey: settings.apiKey,
+    configuration: { apiKey: settings.apiKey, baseURL: settings.endpoint, dangerouslyAllowBrowser: true },
+    modelName: settings.model,
+    temperature: 0,
+  }).withStructuredOutput({
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: 'The AI assistant name, or empty string if not found' }
+    },
+    required: ['name']
+  });
+
+  const messages = [
+    new SystemMessage(DETECT_NAME_PROMPT),
+    new HumanMessage(`System prompt:\n${systemPrompt}`)
+  ];
+
+  const response = await llm.invoke(messages, { signal });
+  return response.name?.trim() || null;
 }
