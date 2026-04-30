@@ -28,10 +28,11 @@ export function buildContextMessage(nowStr, visibleDevices, userName) {
     - ONLY IF the user explicitly confirms AND provides a topic, you may proceed to call mqtt_publish.
   2. NO HALLUCINATIONS: ห้ามอ้างว่าทำสำเร็จหรือกำลังดำเนินการ ถ้าไม่ได้เรียก tool จริง — ถ้าไม่เห็น successful tool result ให้บอก user ตรงๆ ว่าไม่ได้ดำเนินการ อย่ามโนว่าได้ทำไปแล้ว
   3. EXPLICIT ARGS: Resolve pronouns (it, this) to the exact device name.
-  4. PLAY MUSIC: ถ้า user ขอเปิดเพลง (เช่น "เปิดเพลง X", "เปิด X", "ขอฟังเพลง X") ให้ทำตามลำดับนี้เสมอ:
-    - ขั้นที่ 1: ใช้ web_search ค้นหา YouTube link ของเพลงนั้น (query: "[ชื่อเพลง] [ศิลปิน] youtube")
-    - ขั้นที่ 2: เมื่อได้ YouTube URL แล้ว ให้ใช้ os_command เปิด URL นั้นในเบราว์เซอร์ทันที ไม่ต้องถามซ้ำ
-    - ห้ามข้ามขั้นตอน ห้ามอ้างว่าเปิดเพลงแล้วถ้าไม่ได้เรียกทั้ง 2 tool`
+  4. SEARCH THEN ACT: ถ้า user ต้องการเปิด/ดู/ฟังสิ่งที่ยังไม่มี URL หรือข้อมูล ให้ทำตามลำดับนี้เสมอ:
+    - ขั้นที่ 1: ใช้ web_search หา URL ที่ต้องการก่อน (เช่น user ขอเปิดเพลงหรือคลิป → ค้นหาใน YouTube เป็นค่าเริ่มต้น)
+    - ขั้นที่ 2: เมื่อได้ URL แล้ว ใช้ os_command เปิด URL นั้นในเบราว์เซอร์ทันที ไม่ต้องรายงาน URL หรือถามซ้ำ
+    - ห้ามหยุดแค่ส่ง URL กลับให้ user — ต้องเปิดให้เลย
+    - ห้ามข้ามขั้นตอน ห้ามอ้างว่าเปิดแล้วถ้าไม่ได้รัน tool ครบทั้งสองขั้น`
 }
 
 export function buildOsCommandPrompt(os) {
