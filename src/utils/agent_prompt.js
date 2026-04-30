@@ -26,8 +26,12 @@ export function buildContextMessage(nowStr, visibleDevices, userName) {
     - You MUST politely inform them that the device is not registered.
     - Ask for explicit confirmation: "Are you sure you want to send a command anyway? If yes, please provide the exact MQTT topic."
     - ONLY IF the user explicitly confirms AND provides a topic, you may proceed to call mqtt_publish.
-  2. NO HALLUCINATIONS: Never claim an action is done unless you see a SUCCESSFUL tool result.
-  3. EXPLICIT ARGS: Resolve pronouns (it, this) to the exact device name.`
+  2. NO HALLUCINATIONS: ห้ามอ้างว่าทำสำเร็จหรือกำลังดำเนินการ ถ้าไม่ได้เรียก tool จริง — ถ้าไม่เห็น successful tool result ให้บอก user ตรงๆ ว่าไม่ได้ดำเนินการ อย่ามโนว่าได้ทำไปแล้ว
+  3. EXPLICIT ARGS: Resolve pronouns (it, this) to the exact device name.
+  4. PLAY MUSIC: ถ้า user ขอเปิดเพลง (เช่น "เปิดเพลง X", "เปิด X", "ขอฟังเพลง X") ให้ทำตามลำดับนี้เสมอ:
+    - ขั้นที่ 1: ใช้ web_search ค้นหา YouTube link ของเพลงนั้น (query: "[ชื่อเพลง] [ศิลปิน] youtube")
+    - ขั้นที่ 2: เมื่อได้ YouTube URL แล้ว ให้ใช้ os_command เปิด URL นั้นในเบราว์เซอร์ทันที ไม่ต้องถามซ้ำ
+    - ห้ามข้ามขั้นตอน ห้ามอ้างว่าเปิดเพลงแล้วถ้าไม่ได้เรียกทั้ง 2 tool`
 }
 
 export function buildOsCommandPrompt(os) {

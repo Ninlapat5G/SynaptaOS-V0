@@ -1,46 +1,32 @@
 # AIoT Smart Home Dashboard
 
-## วิธีการใช้งานและการตั้งค่า
+## วิธีการใช้งาน
 
-### ติดตั้งและรัน
+### 1. ตั้งค่าครั้งแรก
 
-```bash
-npm install
-npm run dev      # http://localhost:5173
-npm run build    # production build
-```
+ไปที่หน้า **Settings** แล้วกรอก:
+- **API Endpoint** + **API Key** + **Model** (Section 02 Language Model)
+- **MQTT Broker URL** (Section 05) — ค่าเริ่มต้นใช้ HiveMQ public broker ได้เลย
 
-### ตั้งค่าครั้งแรก
+> ตั้งชื่อ Assistant ได้ใน System Prompt เช่น `"ชื่อของเธอคือ Aria"` — แอปจะตรวจจับและอัปเดตชื่อในหน้าแชทอัตโนมัติ
 
-1. เปิดแอป → ไปที่หน้า **Settings**
-2. ใส่ **API Endpoint**, **API Key**, **Model** ใน Section 02 Language Model
-3. ไปที่หน้า **Devices** → กด **+ Add Device** เพื่อเพิ่มอุปกรณ์
-4. กรอก MQTT topic ของอุปกรณ์แต่ละชิ้น
-5. ไปที่หน้า **AI Chat** แล้วลองพิมพ์ เช่น _"เปิดไฟห้องนั่งเล่น"_
+### 2. เพิ่มอุปกรณ์
 
-### LLM Provider ที่รองรับ
+ไปที่หน้า **Devices** → กด **+ Add Device** แล้วกรอก:
+- ชื่ออุปกรณ์ + ห้อง + ประเภท (digital / analog)
+- MQTT topic ที่ใช้รับคำสั่ง (pubTopic) และรายงานสถานะ (subTopic)
 
-| Provider | Endpoint |
+### 3. สั่งงานผ่าน AI Chat
+
+ไปที่หน้า **AI Chat** แล้วพิมพ์หรือพูดคำสั่งได้เลย:
+
+| ตัวอย่างคำสั่ง | ผลลัพธ์ |
 |---|---|
-| Typhoon AI (ค่าเริ่มต้น) | `https://api.opentyphoon.ai/v1` |
-| OpenAI | `https://api.openai.com/v1` |
-| OpenRouter | `https://openrouter.ai/api/v1` |
-| Ollama (local) | `http://localhost:11434/v1` |
-
-### ตั้งชื่อ Assistant อัตโนมัติ
-
-ใส่ชื่อใน System Prompt เช่น `"ชื่อของเธอคือ Aria"` — แอปจะตรวจจับและอัปเดตชื่อในหน้าแชทให้อัตโนมัติเมื่อ System Prompt เปลี่ยน
-
-### Terminal Agent (ควบคุม PC จริง)
-
-```bash
-# รันบนเครื่องที่ต้องการควบคุม
-python terminal_agent.py office-pc
-# หรือใช้ binary (Windows)
-terminal_agent.exe office-pc
-```
-
-สร้าง device ประเภท `os_terminal` ในแอปแล้วชี้ pubTopic ไปที่ `/cmd` topic ของเครื่องนั้น
+| `เปิดไฟห้องนั่งเล่น` | เปิด device ที่กำหนด |
+| `หรี่แสงลงครึ่งนึง` | คำนวณค่าแล้ว publish |
+| `ปิดไฟทั้งบ้าน` | สั่งทุก device พร้อมกัน |
+| `เปิดเพลง [ชื่อเพลง]` | ค้นหา YouTube แล้วเปิดทันที |
+| `ตอนนี้ไฟเปิดกี่ดวง` | ตอบจาก context ไม่ต้อง publish |
 
 ---
 

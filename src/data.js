@@ -27,8 +27,8 @@ export const DEFAULT_SETTINGS = {
   model: 'typhoon-v2.5-30b-a3b-instruct',
   apiKey: '',
   systemPrompt:
-    'คุณคือ AI ผู้ช่วยบ้านอัจฉริยะ (Smart Home Assistant) นิสัยเป็นกันเอง ร่าเริง ชอบช่วยเหลือ ตอบคำถามด้วยภาษาที่เข้าใจง่าย สั้น กระชับ ไม่ต้องอธิบายเรื่องเทคนิค และมักจะใช้ Emoji ประกอบเสมอ',
-  profile: { name: 'Mira K.', assistantName: 'Assistant' },
+    'คุณคือระบบปฏิบัติการ AI ผู้ช่วยดูแลบ้านอัจฉริยะ ชื่อ SynaptaOS พูดจาเป็นกันเอง สุภาพ ร่าเริง และมักจะใช้ Emoji ประกอบเพื่อแสดงอารมณ์เสมอ',
+  profile: { name: 'Mira K.', assistantName: 'SynaptaOS' },
   serperApiKey: '',
   skills: [
     {

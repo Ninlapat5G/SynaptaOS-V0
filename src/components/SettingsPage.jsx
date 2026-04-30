@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import Icon from './ui/Icon'
 import Toggle from './ui/Toggle'
+import { saveDevices, loadDevices, saveAreas, loadAreas } from '../utils/storage'
 
 const MQTT_STATUS_LABEL = {
   connecting: 'Connecting…',
@@ -52,8 +53,8 @@ export default function SettingsPage({ settings, onSave, mqttStatus = 'offline',
     try {
       const allData = {
         settings: s,
-        devices: JSON.parse(localStorage.getItem('aiot_devices') || '[]'),
-        areas: JSON.parse(localStorage.getItem('aiot_areas') || '[]')
+        devices: loadDevices() || [],
+        areas: loadAreas() || [],
       }
       navigator.clipboard.writeText(JSON.stringify(allData, null, 2))
       alert('คัดลอกข้อมูล JSON ลง Clipboard เรียบร้อยแล้วฮะ! 🚀')
@@ -65,8 +66,8 @@ export default function SettingsPage({ settings, onSave, mqttStatus = 'offline',
   const importData = async () => {
     const apply = data => {
       if (data.settings) { setS(data.settings); onSave(data.settings) }
-      if (data.devices) localStorage.setItem('aiot_devices', JSON.stringify(data.devices))
-      if (data.areas) localStorage.setItem('aiot_areas', JSON.stringify(data.areas))
+      if (data.devices) saveDevices(data.devices)
+      if (data.areas) saveAreas(data.areas)
       alert('โหลดข้อมูลสำเร็จแล้วฮะ! 🚀')
     }
     try {
