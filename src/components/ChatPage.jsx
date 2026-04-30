@@ -68,7 +68,11 @@ export default function ChatPage({
         {/* Header */}
         <div className="sh-side-head">
           <div className="sh-side-title">
-            <div className="sh-side-dot" />
+            <img
+              src="/logo.jpg"
+              alt={assistantName}
+              style={{ width: 32, height: 32, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }}
+            />
             <div>
               <div className="sh-side-h1">{assistantName}</div>
               <div className="sh-side-h2 mono">{modelName || 'typhoon-v2'} · {msgCount} msgs</div>

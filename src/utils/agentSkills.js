@@ -10,6 +10,7 @@
 //   3. Add its definition to DEFAULT_SETTINGS.skills in data.js
 
 import { generateSearchQuery } from './agent.js'
+import { remoteShell } from './remoteShell.js'
 
 const SERPER_URL = 'https://google.serper.dev/search'
 
@@ -197,6 +198,7 @@ const toolHandlers = {
   mqtt_read: mqttRead,
   os_command: osCommand,
   web_search: webSearch,
+  remote_shell: remoteShell,
 }
 
 // ── Factory ────────────────────────────────────────────────────────────────────

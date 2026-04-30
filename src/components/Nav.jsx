@@ -40,11 +40,13 @@ export default function Nav({
       <nav className={`sh-nav ${mobileOpen ? 'mobile-open' : ''}`}>
         {/* Brand */}
         <div className="sh-nav-brand">
-          <div className="sh-brand-mark">
-            <span /><span /><span /><span />
-          </div>
+          <img
+            src="/logo.jpg"
+            alt="Synapta"
+            style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }}
+          />
           <div>
-            <div className="sh-brand-name">AIoT</div>
+            <div className="sh-brand-name">SynaptaOS</div>
             <div className="sh-brand-sub mono">Synapta Tech</div>
           </div>
         </div>
@@ -123,7 +125,7 @@ export function MobileTopbar({ page, onOpenMenu, tweaks, onToggleTheme }) {
         <Icon name="menu" size={18} />
       </button>
       <div className="flex items-center">
-        <span className="sh-brand-name text-sm">AIoT</span>
+        <span className="sh-brand-name text-sm">SynaptaOS</span>
         <span className="mono text-[10px] ml-2" style={{ color: 'var(--ink-xdim)' }}>
           · {labels[page]}
         </span>
