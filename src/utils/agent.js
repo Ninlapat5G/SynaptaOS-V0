@@ -68,7 +68,8 @@ async function agentNode(state) {
   const deviceTypeAccess = {
     digital:     ['mqtt_publish', 'mqtt_read'],
     analog:      ['mqtt_publish', 'mqtt_read'],
-    os_terminal: ['os_command'],
+    os_terminal:  ['os_command'],
+    ws_terminal:  ['remote_shell'],
   }
   const visibleDevices = (deviceList || []).filter(d => {
     const required = deviceTypeAccess[d.type]
@@ -96,7 +97,7 @@ async function agentNode(state) {
   );
 
   const contextMessage = new SystemMessage(
-    buildContextMessage(nowString(), visibleDevices, settings.profile?.name || 'User')
+    buildContextMessage(nowString(), visibleDevices, settings.profile?.userBio || 'User')
   );
 
   const fullMessages = [personaMessage, contextMessage, ...messages];

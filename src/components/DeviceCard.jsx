@@ -240,6 +240,100 @@ function EditTerminalCard({ device, onUpdate, onRemove, areas, onCancel }) {
   )
 }
 
+// ── Edit: WsTerminal device ────────────────────────────────────────────────────
+
+function EditWsTerminalCard({ device, onUpdate, onRemove, areas, onCancel }) {
+  const [draft, setDraft] = useState(device)
+  const set = patch => setDraft(d => ({ ...d, ...patch }))
+
+  return (
+    <motion.div
+      className="sh-card sh-card-editing"
+      initial={{ opacity: 0, scale: 0.97 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.15 }}
+    >
+      <div className="sh-card-edit-head">
+        <span className="sh-card-edit-eye mono">EDIT WS TERMINAL</span>
+        <button className="sh-card-gear" style={{ opacity: 1 }} onClick={onCancel}>
+          <Icon name="close" size={13} />
+        </button>
+      </div>
+      <div className="sh-card-edit-body">
+        <label className="sh-field">
+          <span className="mono">NAME</span>
+          <input value={draft.name} onChange={e => set({ name: e.target.value })} />
+        </label>
+        <label className="sh-field">
+          <span className="mono">AREA</span>
+          <select value={draft.room} onChange={e => set({ room: e.target.value })}>
+            {[...new Set([draft.room, ...(areas || [])])].map(a => (
+              <option key={a}>{a}</option>
+            ))}
+          </select>
+        </label>
+        <label className="sh-field">
+          <span className="mono">AGENT NAME</span>
+          <input
+            value={draft.agentName || ''}
+            onChange={e => set({ agentName: e.target.value })}
+            placeholder="office-pc"
+            className="mono"
+          />
+        </label>
+        <div className="sh-builtin-note mono" style={{ marginTop: 4 }}>
+          ต้องตรงกับชื่อที่ terminal agent ลงทะเบียนกับ MCP server
+        </div>
+      </div>
+      <div className="sh-card-edit-foot">
+        <button className="sh-card-remove" onClick={() => onRemove(device.id)}>Remove</button>
+        <div className="flex-1" />
+        <button className="sh-btn-ghost" onClick={onCancel}>Cancel</button>
+        <button
+          className="sh-btn-primary"
+          onClick={() => { onUpdate(draft); onCancel() }}
+        >
+          Save
+        </button>
+      </div>
+    </motion.div>
+  )
+}
+
+// ── WsTerminal widget ──────────────────────────────────────────────────────────
+
+function WsTerminalCard({ device, onEdit }) {
+  return (
+    <motion.div
+      className="sh-card"
+      variants={cardVariants}
+      whileHover={{ y: -2, boxShadow: '0 8px 32px oklch(0 0 0 / 0.18)' }}
+      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+    >
+      <div className="sh-card-top">
+        <div className="sh-card-icon">
+          <Icon name="terminal" size={20} />
+          <span className="sh-card-status-dot" style={{ background: 'var(--accent)' }} />
+        </div>
+        <div className="sh-card-meta">
+          <div className="sh-card-room mono">{device.room.toUpperCase()}</div>
+          <div className="sh-card-name">{device.name}</div>
+        </div>
+        <div className="sh-card-actions">
+          <button className="sh-card-gear" onClick={onEdit} title="Edit">
+            <Icon name="gear" size={13} />
+          </button>
+        </div>
+      </div>
+      <div className="sh-card-topics">
+        <span className="sh-card-topic-chip mono" style={{ color: 'var(--accent)' }}>
+          <b>MCP</b>{device.agentName || device.name}
+        </span>
+      </div>
+    </motion.div>
+  )
+}
+
 // ── Terminal widget ────────────────────────────────────────────────────────────
 
 function OsTerminalCard({ device, onRawPublish, onEdit, onRemove }) {
@@ -332,9 +426,11 @@ const DeviceCard = memo(function DeviceCard({ device, onUpdate, onRemove, areas,
   const isOn = device.type === 'digital' ? device.on : device.value > 0
 
   if (editing) {
-    return device.type === 'os_terminal'
-      ? <EditTerminalCard device={device} onUpdate={onUpdate} onRemove={onRemove} areas={areas} onCancel={() => setEditing(false)} />
-      : <EditCard device={device} onUpdate={onUpdate} onRemove={onRemove} areas={areas} onCancel={() => setEditing(false)} />
+    if (device.type === 'os_terminal')
+      return <EditTerminalCard device={device} onUpdate={onUpdate} onRemove={onRemove} areas={areas} onCancel={() => setEditing(false)} />
+    if (device.type === 'ws_terminal')
+      return <EditWsTerminalCard device={device} onUpdate={onUpdate} onRemove={onRemove} areas={areas} onCancel={() => setEditing(false)} />
+    return <EditCard device={device} onUpdate={onUpdate} onRemove={onRemove} areas={areas} onCancel={() => setEditing(false)} />
   }
 
   if (device.type === 'os_terminal') {
@@ -346,6 +442,10 @@ const DeviceCard = memo(function DeviceCard({ device, onUpdate, onRemove, areas,
         onRemove={onRemove}
       />
     )
+  }
+
+  if (device.type === 'ws_terminal') {
+    return <WsTerminalCard device={device} onEdit={() => setEditing(true)} />
   }
 
   return (
@@ -560,6 +660,99 @@ export function AddTerminalTile({ onCreate, defaultArea }) {
         <div className="sh-add-plus"><Icon name="terminal" size={22} /></div>
         <div className="sh-add-label">Add Terminal</div>
         <div className="sh-add-sub mono">CMD · BASH · MQTT</div>
+      </div>
+    </motion.button>
+  )
+}
+
+// ── Add WsTerminal tile (MCP / WebSocket backend) ─────────────────────────────
+
+export function AddWsTerminalTile({ onCreate, defaultArea }) {
+  const [forming, setForming] = useState(false)
+  const [name, setName] = useState('')
+  const [agentName, setAgentName] = useState('')
+
+  useEffect(() => {
+    if (name.trim()) setAgentName(name.trim().toLowerCase().replace(/\s+/g, '-'))
+    else setAgentName('')
+  }, [name])
+
+  const reset = () => { setForming(false); setName(''); setAgentName('') }
+
+  const save = () => {
+    const trimName      = name.trim()
+    const trimAgentName = agentName.trim()
+    if (!trimName || !trimAgentName) return
+    onCreate({
+      id:        'wst-' + Date.now().toString(36),
+      name:      trimName,
+      room:      defaultArea || 'Living Room',
+      type:      'ws_terminal',
+      agentName: trimAgentName,
+      icon:      'terminal',
+    })
+    reset()
+  }
+
+  if (forming) {
+    return (
+      <motion.div
+        className="sh-card sh-card-editing"
+        initial={{ opacity: 0, scale: 0.97 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.15 }}
+      >
+        <div className="sh-card-edit-head">
+          <span className="sh-card-edit-eye mono">NEW WS TERMINAL</span>
+          <button className="sh-card-gear" style={{ opacity: 1 }} onClick={reset}>
+            <Icon name="close" size={13} />
+          </button>
+        </div>
+        <div className="sh-card-edit-body">
+          <label className="sh-field">
+            <span className="mono">COMPUTER NAME</span>
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="Office PC" autoFocus />
+          </label>
+          <label className="sh-field">
+            <span className="mono">AGENT NAME</span>
+            <input
+              value={agentName}
+              onChange={e => setAgentName(e.target.value)}
+              placeholder="office-pc"
+              className="mono"
+            />
+          </label>
+          <div className="sh-builtin-note mono" style={{ marginTop: 4 }}>
+            ต้องตรงกับชื่อที่ terminal agent ใช้เมื่อเชื่อมกับ MCP server
+          </div>
+        </div>
+        <div className="sh-card-edit-foot">
+          <div className="flex-1" />
+          <button className="sh-btn-ghost" onClick={reset}>Cancel</button>
+          <button
+            className="sh-btn-primary"
+            disabled={!name.trim() || !agentName.trim()}
+            onClick={save}
+          >
+            Add
+          </button>
+        </div>
+      </motion.div>
+    )
+  }
+
+  return (
+    <motion.button
+      className="sh-card sh-add"
+      onClick={() => setForming(true)}
+      variants={cardVariants}
+      whileHover={{ y: -2, scale: 1.01 }}
+      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+    >
+      <div className="sh-add-inner">
+        <div className="sh-add-plus"><Icon name="terminal" size={22} /></div>
+        <div className="sh-add-label">Add WS Terminal</div>
+        <div className="sh-add-sub mono" style={{ color: 'var(--accent)' }}>MCP · CrewAI · beta</div>
       </div>
     </motion.button>
   )

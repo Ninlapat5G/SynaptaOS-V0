@@ -28,7 +28,7 @@ export const DEFAULT_SETTINGS = {
   apiKey: '',
   systemPrompt:
     'คุณคือระบบปฏิบัติการ AI ผู้ช่วยดูแลบ้านอัจฉริยะ ชื่อ SynaptaOS พูดจาเป็นกันเอง สุภาพ ร่าเริง และมักจะใช้ Emoji ประกอบเพื่อแสดงอารมณ์เสมอ',
-  profile: { name: 'Mira K.', assistantName: 'SynaptaOS' },
+  profile: { userBio: '', assistantName: 'SynaptaOS' },
   serperApiKey: '',
   skills: [
     {
@@ -62,7 +62,17 @@ export const DEFAULT_SETTINGS = {
       schema:
         '{"type":"object","properties":{"query":{"type":"string","description":"Concise and specific search query"}},"required":["query"]}',
     },
+    {
+      id: 'remote_shell',
+      name: 'remote_shell',
+      description: 'Execute a task on a remote terminal agent (ws_terminal device). CrewAI translates the task to a safe OS command and returns the output. Use agent_name from the device list.',
+      enabled: true,
+      schema:
+        '{"type":"object","properties":{"task":{"type":"string","description":"Natural language description of what to do on the remote machine"},"agent_name":{"type":"string","description":"agent_name of the ws_terminal device"},"wait_output":{"type":"boolean","description":"True if the task is expected to return output (e.g. list files). False for fire-and-forget (e.g. shutdown)."}},"required":["task","agent_name","wait_output"]}',
+    },
   ],
+  remoteShellBackend: 'browser',
+  mcpServerUrl: 'http://localhost:8000',
   mqtt: {
     broker: 'wss://broker.hivemq.com:8884/mqtt',
     port: '8884',
@@ -73,8 +83,8 @@ export const DEFAULT_SETTINGS = {
 export const INITIAL_AREAS = ['Living Room', 'Kitchen', 'Bedroom', 'Entry', 'Garage']
 export const INITIAL_TWEAKS = {
   theme: 'dark',
-  accentHue: 175,
-  accentChroma: 0.15,
+  accentHue: 192,
+  accentChroma: 0.20,
   density: 'comfortable',
   showGrid: true,
 }
