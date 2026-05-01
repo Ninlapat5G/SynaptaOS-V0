@@ -1,15 +1,15 @@
 """
-SynaptaOS Hub Agent
-===================
-Runs on a remote computer. Connects to MQTT broker, waits for tasks,
-runs CrewAI (safety check + web search + command generation),
-executes the command, and streams output back line-by-line.
+SynaptaOS OS Control Agent
+==========================
+Remote terminal agent. Receives OS commands via MQTT, executes them,
+and streams output back line-by-line.
 
 Topic layout (auto-built from MQTT_BASE_TOPIC + AGENT_NAME):
-  cmd    : {base}/hub/{AGENT_NAME}/cmd
-  output : {base}/hub/{AGENT_NAME}/output
-  cancel : {base}/hub/{AGENT_NAME}/cancel
+  cmd    : {base}/os/{AGENT_NAME}/cmd
+  output : {base}/os/{AGENT_NAME}/output
+  cancel : {base}/os/{AGENT_NAME}/cancel
 
+'cd <path>' updates the persistent working directory (not a subprocess).
 Every response ends with "(mqtt_end)".
 """
 
@@ -17,7 +17,6 @@ import os
 import platform
 import subprocess
 import threading
-from datetime import datetime
 from pathlib import Path
 
 import paho.mqtt.client as mqtt
@@ -31,24 +30,22 @@ BROKER  = os.getenv("MQTT_BROKER",     "broker.hivemq.com")
 PORT    = int(os.getenv("MQTT_PORT",   "1883"))
 USE_TLS = os.getenv("MQTT_USE_TLS",    "false").lower() == "true"
 BASE    = os.getenv("MQTT_BASE_TOPIC", "").rstrip("/")
-AGENT   = os.getenv("AGENT_NAME",      "hub-agent")
+AGENT   = os.getenv("AGENT_NAME",      "os-agent")
 TIMEOUT = float(os.getenv("COMMAND_TIMEOUT", "60"))
-
-_OS_MAP = {"Windows": "windows", "Darwin": "mac", "Linux": "linux"}
-OS_TYPE = os.getenv("OS_TYPE") or _OS_MAP.get(platform.system(), "linux")
 
 
 def _t(suffix: str) -> str:
     return f"{BASE}/{suffix}" if BASE else suffix
 
 
-CMD_TOPIC    = _t(f"hub/{AGENT}/cmd")
-OUTPUT_TOPIC = _t(f"hub/{AGENT}/output")
-CANCEL_TOPIC = _t(f"hub/{AGENT}/cancel")
+CMD_TOPIC    = _t(f"os/{AGENT}/cmd")
+OUTPUT_TOPIC = _t(f"os/{AGENT}/output")
+CANCEL_TOPIC = _t(f"os/{AGENT}/cancel")
 
 # ── State ─────────────────────────────────────────────────────────────────────
 
 _client:    mqtt.Client | None      = None
+_cwd:       str                     = str(Path(__file__).resolve().parent)
 _proc:      subprocess.Popen | None = None
 _task_lock  = threading.Lock()   # one task at a time
 _proc_lock  = threading.Lock()   # protects _proc reference
@@ -78,8 +75,6 @@ def _run(command: str) -> str | None:
     """
     global _proc
 
-    print(f"[Hub] $ {command}")
-
     try:
         with _proc_lock:
             _proc = subprocess.Popen(
@@ -90,6 +85,7 @@ def _run(command: str) -> str | None:
                 text=True,
                 encoding="utf-8",
                 errors="replace",
+                cwd=_cwd,
             )
 
         for line in _proc.stdout:
@@ -120,36 +116,34 @@ def _run(command: str) -> str | None:
 
 # ── Task handler ──────────────────────────────────────────────────────────────
 
-def _handle_task(task: str) -> None:
+def _handle_task(command: str) -> None:
+    global _cwd
+
     if not _task_lock.acquire(blocking=False):
-        _end("[busy] Already running a task — send 'cancel' to abort.")
+        _end("[busy] Already running a command — send 'cancel' to abort.")
         return
 
     _kill_event.clear()
 
     try:
-        now = datetime.now().strftime("%A %d %B %Y %H:%M")
-        print(f"\n[Hub] Task: {task}")
+        command = command.strip()
+        print(f"\n[OS] $ {command}  (cwd: {_cwd})")
 
-        try:
-            from crew import run_crew
-        except ImportError as e:
-            _end(f"[error] Cannot import crew: {e}")
+        # ── cd: update working directory without subprocess ────────────────
+        if command == "cd" or command.lower().startswith(("cd ", "cd\t")):
+            target = command[2:].strip() or str(Path.home())
+            try:
+                resolved = Path(_cwd, target).resolve()
+                if not resolved.is_dir():
+                    _end(f"[error] cd: no such directory: {target}")
+                    return
+                _cwd = str(resolved)
+                _end(f"[cwd] {_cwd}")
+            except Exception as e:
+                _end(f"[error] cd: {e}")
             return
 
-        try:
-            command = run_crew(task=task, os_type=OS_TYPE, now=now)
-        except ValueError as e:
-            _end(f"[safety] {e}")
-            return
-        except Exception as e:
-            _end(f"[crew error] {e}")
-            return
-
-        if _kill_event.is_set():
-            _end("[cancelled]")
-            return
-
+        # ── subprocess ─────────────────────────────────────────────────────
         err = _run(command)
 
         if _kill_event.is_set():
@@ -170,7 +164,7 @@ def _cancel() -> None:
     with _proc_lock:
         p = _proc
     if p:
-        print("[Hub] Cancel received — killing process")
+        print("[OS] Cancel received — killing process")
         _kill_event.set()
         p.kill()
 
@@ -181,12 +175,12 @@ def _on_connect(client, userdata, flags, rc, properties=None):
     if rc == 0:
         client.subscribe(CMD_TOPIC,    qos=1)
         client.subscribe(CANCEL_TOPIC, qos=1)
-        print(f"[Hub] Connected")
-        print(f"      CMD    : {CMD_TOPIC}")
-        print(f"      OUTPUT : {OUTPUT_TOPIC}")
-        print(f"      CANCEL : {CANCEL_TOPIC}")
+        print(f"[OS] Connected")
+        print(f"     CMD    : {CMD_TOPIC}")
+        print(f"     OUTPUT : {OUTPUT_TOPIC}")
+        print(f"     CANCEL : {CANCEL_TOPIC}")
     else:
-        print(f"[Hub] Connect failed rc={rc}")
+        print(f"[OS] Connect failed rc={rc}")
 
 
 def _on_message(client, userdata, msg):
@@ -199,16 +193,17 @@ def _on_message(client, userdata, msg):
 
 
 def _on_disconnect(client, userdata, rc, properties=None):
-    print(f"[Hub] Disconnected rc={rc} — will reconnect…")
+    print(f"[OS] Disconnected rc={rc} — will reconnect…")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
     global _client
-    print("SynaptaOS Hub Agent")
-    print(f"  OS     : {OS_TYPE} ({platform.system()} {platform.release()})")
+    print("SynaptaOS OS Control Agent")
+    print(f"  OS     : {platform.system()} {platform.release()}")
     print(f"  Broker : {BROKER}:{PORT}{'  [TLS]' if USE_TLS else ''}")
+    print(f"  CWD    : {_cwd}")
     print()
 
     _client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)

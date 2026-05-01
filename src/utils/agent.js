@@ -128,7 +128,7 @@ async function toolNode(state) {
     onToolCall?.(tc.name, tc.args, currentRound);
     let result;
     try {
-      result = await executeTool(tc.name, tc.args);
+      result = await executeTool(tc.name, tc.args, state.signal);
     } catch (err) {
       result = { error: err.message || "Execution failed" };
     }

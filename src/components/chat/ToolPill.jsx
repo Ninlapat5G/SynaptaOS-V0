@@ -57,7 +57,10 @@ export default function ToolPill({ name, args, result, round, executing }) {
             transition={{ duration: 0.25 }}
           >
             <span className="sh-tool-result-label mono">↳ RESULT</span>
-            <pre className="sh-tool-args mt-1">{JSON.stringify(result, null, 2)}</pre>
+            {result?.summary
+              ? <pre className="sh-tool-args mt-1">{result.summary}</pre>
+              : <pre className="sh-tool-args mt-1">{JSON.stringify(result, null, 2)}</pre>
+            }
           </motion.div>
         )}
       </AnimatePresence>

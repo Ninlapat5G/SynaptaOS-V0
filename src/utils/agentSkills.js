@@ -95,7 +95,7 @@ async function mqttRead(args, ctx) {
 
 async function osCommand(args, ctx) {
   const { mqttClient, settings, devicesRef, baseTopicRef,
-    mqttWaitForStream, normalizeBase, buildFullTopic, generateOsCommand } = ctx
+    mqttWaitForStream, normalizeBase, buildFullTopic, generateOsCommand, signal } = ctx
 
   const { instruction, os, topic, wait_output } = args
   if (!mqttClient) return { success: false, error: 'MQTT not connected' }
@@ -116,6 +116,12 @@ async function osCommand(args, ctx) {
   const outputTopic = wait_output && device?.subTopic
     ? buildFullTopic(device.subTopic, base)
     : null
+
+  const rawPub = device?.pubTopic || topic
+  const cancelTopic = rawPub ? buildFullTopic(rawPub.replace(/\/cmd$/, '/cancel'), base) : null
+  signal?.addEventListener('abort', () => {
+    if (cancelTopic) mqttClient.publish(cancelTopic, 'cancel', { qos: 1 })
+  }, { once: true })
 
   // Register stream listener BEFORE publishing so no early chunks are missed
   const streamPromise = outputTopic ? mqttWaitForStream(outputTopic, 10000) : null
@@ -143,7 +149,7 @@ async function osCommand(args, ctx) {
 
 async function hubCommand(args, ctx) {
   const { mqttClient, devicesRef, baseTopicRef,
-    mqttWaitForStream, normalizeBase, buildFullTopic } = ctx
+    mqttWaitForStream, normalizeBase, buildFullTopic, signal } = ctx
 
   // เปลี่ยนมารับ topic แทน
   const { task, topic, wait_output } = args
@@ -156,13 +162,17 @@ async function hubCommand(args, ctx) {
   const device = devicesRef.current.find(
     d => d.type === 'hub' && (d.pubTopic === topic || buildFullTopic(d.pubTopic, base) === fullTopic)
   )
-
   if (!device) return { success: false, error: `Hub device with topic '${topic}' not found in device list` }
   if (!device.pubTopic) return { success: false, error: `Hub device '${device.name}' has no pubTopic` }
 
   const outputTopic = wait_output && device.subTopic
     ? buildFullTopic(device.subTopic, base)
     : null
+
+  const cancelTopic = buildFullTopic(device.pubTopic.replace(/\/cmd$/, '/cancel'), base)
+  signal?.addEventListener('abort', () => {
+    mqttClient.publish(cancelTopic, 'cancel', { qos: 1 })
+  }, { once: true })
 
   const streamPromise = outputTopic ? mqttWaitForStream(outputTopic, 60000) : null
 
@@ -248,11 +258,11 @@ const toolHandlers = {
 // ── Factory ────────────────────────────────────────────────────────────────────
 
 export function createExecuteTool(ctx) {
-  return async function executeTool(name, args) {
+  return async function executeTool(name, args, signal) {
     const skill = (ctx.settings.skills || []).find(sk => sk.name === name)
     if (skill && !skill.enabled) return { success: false, error: `Tool "${name}" is disabled` }
     const handler = toolHandlers[name]
     if (!handler) return { success: false, error: `Unknown tool: ${name}` }
-    return handler(args, ctx)
+    return handler(args, { ...ctx, signal })
   }
 }
