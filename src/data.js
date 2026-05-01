@@ -49,7 +49,7 @@ export const DEFAULT_SETTINGS = {
     {
       id: 'os_command',
       name: 'os_command',
-      description: 'Translate a natural-language instruction into an OS terminal command and publish it via MQTT to a target computer. Use when an os_terminal device is in the device list.',
+      description: 'Translate a natural-language instruction into an OS terminal command and publish it via MQTT. Use ONLY for os_terminal type devices — never for hub devices.',
       enabled: true,
       schema:
         '{"type":"object","properties":{"instruction":{"type":"string","description":"Natural language description of what to do on the remote machine"},"os":{"type":"string","enum":["windows","mac","linux"],"description":"Target operating system"},"topic":{"type":"string","description":"MQTT pubTopic of the target os_terminal device"},"wait_output":{"type":"boolean","description":"True if the command is expected to return output (e.g. dir, ls, cat). False for fire-and-forget commands (e.g. shutdown, reboot, open app)."}},"required":["instruction","os","topic","wait_output"]}',
@@ -65,7 +65,7 @@ export const DEFAULT_SETTINGS = {
     {
       id: 'hub',
       name: 'hub',
-      description: 'Execute a task on a remote hub agent. The agent auto-detects its OS, runs a safety check, searches the web if needed, then executes the best command. Always streams output back. Use topic from the hub device list.',
+      description: 'Execute a task on a remote hub agent. Use ONLY for hub type devices — never for os_terminal devices. The agent runs a ReAct loop (can search web, run multiple commands) and streams output back.',
       enabled: true,
       schema:
         '{"type":"object","properties":{"task":{"type":"string","description":"Natural language description of what to do on the remote machine"},"topic":{"type":"string","description":"MQTT pubTopic of the target hub device"}},"required":["task","topic"]}',
