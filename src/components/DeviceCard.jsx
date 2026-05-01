@@ -719,14 +719,6 @@ export function AddHubTile({ onCreate, defaultArea }) {
   const [subTopic, setSubTopic] = useState('')
 
   useEffect(() => {
-    if (name.trim()) {
-      setAgentName(name.trim().toLowerCase().replace(/\s+/g, '-'))
-    } else {
-      setAgentName('')
-    }
-  }, [name])
-
-  useEffect(() => {
     const a = agentName.trim()
     setPubTopic(a ? `hub/${a}/cmd` : '')
     setSubTopic(a ? `hub/${a}/output` : '')
