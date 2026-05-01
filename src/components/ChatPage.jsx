@@ -78,7 +78,7 @@ export default function ChatPage({
             />
             <div>
               <div className="sh-side-h1">{assistantName}</div>
-              <div className="sh-side-h2 mono">{modelName || 'typhoon-v2'} · {msgCount} msgs</div>
+              <div className="sh-side-h2 mono">powered by SynaptaOS · {modelName || 'typhoon-v2'}</div>
             </div>
           </div>
           <div className="sh-side-head-right">
