@@ -1,6 +1,5 @@
 import { motion } from 'framer-motion'
 import ReactMarkdown from 'react-markdown'
-import Icon from '../ui/Icon'
 import ToolPill from './ToolPill'
 
 const mdComponents = {
@@ -13,6 +12,10 @@ const mdComponents = {
     ? <code className="sh-md-code">{children}</code>
     : <pre className="sh-md-pre"><code>{children}</code></pre>,
 }
+
+const AvatarLogo = () => (
+  <img src="/logo.jpg" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />
+)
 
 export default function ChatBubble({ msg }) {
   if (msg.role === 'tool') {
@@ -35,7 +38,7 @@ export default function ChatBubble({ msg }) {
           animate={{ scale: 1 }}
           transition={{ type: 'spring', stiffness: 500, damping: 28, delay: 0.05 }}
         >
-          <Icon name="sparkle" size={13} />
+          <AvatarLogo />
         </motion.div>
       )}
       <div className="sh-msg-bubble">
@@ -61,7 +64,7 @@ export function TypingBubble() {
       transition={{ type: 'spring', stiffness: 400, damping: 30 }}
     >
       <div className="sh-msg-avatar">
-        <Icon name="sparkle" size={13} />
+        <img src="/logo.jpg" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />
       </div>
       <div className="sh-msg-bubble">
         <div className="sh-msg-who mono">ASSISTANT</div>
