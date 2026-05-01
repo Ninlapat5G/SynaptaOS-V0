@@ -24,6 +24,10 @@ SCHEMA = {
 }
 
 
+def call(args: dict, **_) -> str:
+    return search(args["query"])
+
+
 def search(query: str) -> str:
     api_key = os.getenv("SERPER_API_KEY", "")
     if not api_key:

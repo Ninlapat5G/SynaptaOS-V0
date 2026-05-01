@@ -20,7 +20,7 @@ from pathlib import Path
 import paho.mqtt.client as mqtt
 from dotenv import load_dotenv
 
-from crew import run_crew
+import runner
 from tools import os_exec
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
@@ -75,7 +75,7 @@ def _handle_task(task: str) -> None:
     print(f"\n[Hub] Task: {task}")
 
     try:
-        result = run_crew(
+        result = runner.run(
             task=task,
             os_type=OS_TYPE,
             pub=_pub,

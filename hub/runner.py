@@ -1,14 +1,11 @@
 """
 ReAct loop for the Hub Agent.
 
-The LLM has access to os_exec and web_search tools.
+The LLM has access to tools defined in the tools/ directory.
 It loops — calling tools, observing output, deciding next steps —
 until it produces a final text response (no more tool calls).
 
-To add a new tool:
-  1. Create tools/<name>.py with SCHEMA + the function
-  2. Add it to tools/__init__.py SCHEMAS list
-  3. Handle it in the dispatch block below
+To add a new tool: see tools/__init__.py
 """
 
 import json
@@ -21,8 +18,8 @@ from typing import Callable
 from openai import OpenAI
 from dotenv import load_dotenv
 
-from tools import SCHEMAS
-from tools import os_exec, web_search
+from tools import SCHEMAS, execute
+from tools import os_exec
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
@@ -44,7 +41,7 @@ Current date/time: {now}\
 """
 
 
-def run_crew(
+def run(
     task: str,
     os_type: str,
     pub: Callable[[str], None],
@@ -86,7 +83,6 @@ def run_crew(
 
         msg = response.choices[0].message
 
-        # No tool calls → final answer
         if not msg.tool_calls:
             return msg.content or ""
 
@@ -99,19 +95,15 @@ def run_crew(
             name = tc.function.name
             args = json.loads(tc.function.arguments)
 
-            # ── Dispatch ──────────────────────────────────────────────────────
             if name == "os_exec":
                 pub(f"$ {args['command']}")
-                result = os_exec.run(
-                    args["command"],
-                    timeout=timeout,
-                    kill_event=kill_event,
-                    on_line=pub,
-                )
-            elif name == "web_search":
-                result = web_search.search(args["query"])
-            else:
-                result = f"[error] Unknown tool: {name}"
+
+            result = execute(
+                name, args,
+                timeout=timeout,
+                kill_event=kill_event,
+                on_line=pub,
+            )
 
             messages.append({
                 "role":         "tool",

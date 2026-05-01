@@ -111,3 +111,8 @@ def cancel() -> None:
 def reset_cwd() -> None:
     global _cwd
     _cwd = str(Path(__file__).resolve().parent.parent)
+
+
+def call(args: dict, timeout: float = 60, kill_event: threading.Event | None = None,
+         on_line: Callable[[str], None] | None = None, **_) -> str:
+    return run(args["command"], timeout=timeout, kill_event=kill_event, on_line=on_line)
