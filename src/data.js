@@ -65,10 +65,10 @@ export const DEFAULT_SETTINGS = {
     {
       id: 'hub',
       name: 'hub',
-      description: 'Execute a task on a remote hub agent. The agent auto-detects its OS, runs a safety check, searches the web if needed, then executes the best command. Use agent_name from the hub device list.',
+      description: 'Execute a task on a remote hub agent. The agent auto-detects its OS, runs a safety check, searches the web if needed, then executes the best command. Use topic from the hub device list.',
       enabled: true,
       schema:
-        '{"type":"object","properties":{"task":{"type":"string","description":"Natural language description of what to do on the remote machine"},"agent_name":{"type":"string","description":"name or agentName of the hub device"},"wait_output":{"type":"boolean","description":"True if the task is expected to return output (e.g. list files). False for fire-and-forget (e.g. shutdown)."}},"required":["task","agent_name","wait_output"]}',
+        '{"type":"object","properties":{"task":{"type":"string","description":"Natural language description of what to do on the remote machine"},"topic":{"type":"string","description":"MQTT pubTopic of the target hub device"},"wait_output":{"type":"boolean","description":"True if the task is expected to return output (e.g. list files). False for fire-and-forget (e.g. shutdown)."}},"required":["task","topic","wait_output"]}',
     },
   ],
   mqtt: {

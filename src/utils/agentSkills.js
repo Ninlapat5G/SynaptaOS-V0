@@ -145,18 +145,21 @@ async function hubCommand(args, ctx) {
   const { mqttClient, devicesRef, baseTopicRef,
     mqttWaitForStream, normalizeBase, buildFullTopic } = ctx
 
-  const { task, agent_name, wait_output } = args
+  // เปลี่ยนมารับ topic แทน
+  const { task, topic, wait_output } = args
   if (!mqttClient) return { success: false, error: 'MQTT not connected' }
-  if (!task || !agent_name) return { success: false, error: 'Missing args: task, agent_name' }
+  if (!task || !topic) return { success: false, error: 'Missing args: task, topic' }
 
+  // หา Device จาก topic ให้เป๊ะๆ
+  const base = normalizeBase(baseTopicRef.current)
+  const fullTopic = buildFullTopic(topic, base)
   const device = devicesRef.current.find(
-    d => d.type === 'hub' && (d.agentName === agent_name || d.name === agent_name)
+    d => d.type === 'hub' && (d.pubTopic === topic || buildFullTopic(d.pubTopic, base) === fullTopic)
   )
-  if (!device)       return { success: false, error: `Hub agent '${agent_name}' not found in device list` }
-  if (!device.pubTopic) return { success: false, error: `Hub device '${agent_name}' has no pubTopic` }
 
-  const base        = normalizeBase(baseTopicRef.current)
-  const fullTopic   = buildFullTopic(device.pubTopic, base)
+  if (!device) return { success: false, error: `Hub device with topic '${topic}' not found in device list` }
+  if (!device.pubTopic) return { success: false, error: `Hub device '${device.name}' has no pubTopic` }
+
   const outputTopic = wait_output && device.subTopic
     ? buildFullTopic(device.subTopic, base)
     : null
@@ -171,13 +174,13 @@ async function hubCommand(args, ctx) {
     return { success: false, error: err.message }
   }
 
-  if (!streamPromise) return { success: true, summary: `Task sent to ${agent_name}: ${task}` }
+  if (!streamPromise) return { success: true, summary: `Task sent to ${device.name}: ${task}` }
 
   const { chunks, timedOut } = await streamPromise
   const output = chunks.join('\n')
 
   if (timedOut && chunks.length === 0)
-    return { success: true, summary: `Task sent to ${agent_name}\n\n⚠️ ไม่ได้รับผลลัพธ์ — hub agent อาจออฟไลน์อยู่` }
+    return { success: true, summary: `Task sent to ${device.name}\n\n⚠️ ไม่ได้รับผลลัพธ์ — hub agent อาจออฟไลน์อยู่` }
 
   const note = timedOut ? '\n\n⚠️ ไม่ได้รับ (mqtt_end) — hub agent อาจขาดการเชื่อมต่อ' : ''
   return { success: true, summary: `${output || '(no output)'}${note}` }
@@ -236,10 +239,10 @@ async function webSearch(args, ctx) {
 
 const toolHandlers = {
   mqtt_publish: mqttPublish,
-  mqtt_read:    mqttRead,
-  os_command:   osCommand,
-  hub:          hubCommand,
-  web_search:   webSearch,
+  mqtt_read: mqttRead,
+  os_command: osCommand,
+  hub: hubCommand,
+  web_search: webSearch,
 }
 
 // ── Factory ────────────────────────────────────────────────────────────────────
