@@ -10,10 +10,15 @@ export function useSettings() {
     const saved = loadSettings()
     if (!saved) return DEFAULT_SETTINGS
 
-    // Inject any new skills added in DEFAULT_SETTINGS that aren't in saved data
+    // Merge skills: update schema/description from DEFAULT_SETTINGS, keep user's enabled state
     const savedIds = new Set((saved.skills || []).map(s => s.id))
+    const defaultById = Object.fromEntries(DEFAULT_SETTINGS.skills.map(s => [s.id, s]))
     const mergedSkills = [
-      ...(saved.skills || []),
+      ...(saved.skills || []).map(s =>
+        defaultById[s.id]
+          ? { ...defaultById[s.id], enabled: s.enabled }
+          : s
+      ),
       ...DEFAULT_SETTINGS.skills.filter(s => !savedIds.has(s.id)),
     ]
     return {
