@@ -34,13 +34,13 @@ SUB_TOPIC   = os.getenv("MQTT_SUB_TOPIC", "hub/agent/cmd")
 PUB_TOPIC   = os.getenv("MQTT_PUB_TOPIC", "hub/agent/output")
 TIMEOUT     = float(os.getenv("COMMAND_TIMEOUT", "60"))
 
-# OS map — extend if deploying on other platforms
+# OS_TYPE from env overrides auto-detection
 _OS_MAP = {
     "Windows": "windows",
     "Darwin":  "mac",
     "Linux":   "linux",
 }
-OS_TYPE = _OS_MAP.get(platform.system(), "linux")
+OS_TYPE = os.getenv("OS_TYPE") or _OS_MAP.get(platform.system(), "linux")
 
 # ── MQTT client (shared, thread-safe publish) ─────────────────────────────────
 
