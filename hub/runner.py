@@ -11,6 +11,7 @@ To add a new tool: see tools/__init__.py
 import json
 import os
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
@@ -24,6 +25,13 @@ from tools import os_exec
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
 MAX_ROUNDS = 10
+
+# Pre-create client once at startup — not per task
+_client = OpenAI(
+    api_key=os.getenv("LLM_API_KEY", ""),
+    base_url=os.getenv("LLM_BASE_URL", "https://api.openai.com/v1"),
+)
+_model = os.getenv("LLM_MODEL", "gpt-4o-mini")
 
 _SYSTEM = """\
 You are an AI assistant with direct access to a {os_type} computer.
@@ -59,29 +67,25 @@ def run(
 
     os_exec.reset_cwd()
 
-    client = OpenAI(
-        api_key=os.getenv("LLM_API_KEY", ""),
-        base_url=os.getenv("LLM_BASE_URL", "https://api.openai.com/v1"),
-    )
-    model = os.getenv("LLM_MODEL", "gpt-4o-mini")
-
     messages: list[dict] = [
         {"role": "system", "content": _SYSTEM.format(os_type=os_type, now=now)},
         {"role": "user",   "content": task},
     ]
 
-    for _ in range(MAX_ROUNDS):
+    for round_n in range(1, MAX_ROUNDS + 1):
         if kill_event.is_set():
             return "[cancelled]"
 
-        response = client.chat.completions.create(
-            model=model,
+        t0 = time.perf_counter()
+        response = _client.chat.completions.create(
+            model=_model,
             messages=messages,
             tools=SCHEMAS,
             tool_choice="auto",
         )
 
         msg = response.choices[0].message
+        print(f"      R{round_n} LLM : {(time.perf_counter() - t0) * 1000:.0f} ms")
 
         if not msg.tool_calls:
             return msg.content or ""

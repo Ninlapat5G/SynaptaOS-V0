@@ -15,6 +15,7 @@ Every response ends with "(mqtt_end)".
 import os
 import platform
 import threading
+import time
 from pathlib import Path
 
 import paho.mqtt.client as mqtt
@@ -66,15 +67,18 @@ def _end(msg: str = "") -> None:
 
 # ── Task handler ───────────────────────────────────────────────────────────────
 
-def _handle_task(task: str) -> None:
+def _handle_task(task: str, received_at: float) -> None:
     if not _task_lock.acquire(blocking=False):
         _end("[busy] Already running a task — send 'cancel' to abort.")
         return
 
     _kill_event.clear()
-    print(f"\n[Hub] Task: {task}")
+    dispatch_ms = (time.perf_counter() - received_at) * 1000
+    print(f"\n[Hub] Task : {task}")
+    print(f"      MQTT dispatch : {dispatch_ms:.0f} ms")
 
     try:
+        t0 = time.perf_counter()
         result = runner.run(
             task=task,
             os_type=OS_TYPE,
@@ -82,6 +86,7 @@ def _handle_task(task: str) -> None:
             kill_event=_kill_event,
             timeout=TIMEOUT,
         )
+        print(f"      Total elapsed : {(time.perf_counter() - t0) * 1000:.0f} ms")
         _end(result)
     except Exception as e:
         _end(f"[error] {e}")
@@ -115,7 +120,8 @@ def _on_message(client, userdata, msg):
         return
     payload = msg.payload.decode(errors="replace").strip()
     if payload:
-        threading.Thread(target=_handle_task, args=(payload,), daemon=True).start()
+        received_at = time.perf_counter()
+        threading.Thread(target=_handle_task, args=(payload, received_at), daemon=True).start()
 
 
 def _on_disconnect(client, userdata, rc, properties=None):
