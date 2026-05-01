@@ -22,6 +22,7 @@ from pathlib import Path
 
 import paho.mqtt.client as mqtt
 from dotenv import load_dotenv
+from crew import run_crew
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
@@ -130,12 +131,6 @@ def _handle_task(task: str) -> None:
     try:
         now = datetime.now().strftime("%A %d %B %Y %H:%M")
         print(f"\n[Hub] Task: {task}")
-
-        try:
-            from crew import run_crew
-        except ImportError as e:
-            _end(f"[error] Cannot import crew: {e}")
-            return
 
         try:
             command = run_crew(task=task, os_type=OS_TYPE, now=now)

@@ -1,41 +1,38 @@
 """
 CrewAI crew for the Hub Agent.
 
-Three agents run sequentially:
+Agents and LLM are created once at import time so they are ready
+when the first task arrives. run_crew() just builds Tasks and kicks off.
+
   1. SafetyAgent   — decides whether the task is safe to execute.
   2. CommandAgent  — translates the task into a raw OS command,
-                     can search the web when needed.
+                     optionally searches the web for syntax.
 
 run_crew(task, os_type, now) is synchronous (blocking).
 Raises ValueError if the safety agent flags the task as unsafe.
 """
 
 import os
-import json
 from datetime import datetime
 from pathlib import Path
 
 import requests
-from crewai import Agent, Crew, Process, Task
+from crewai import Agent, Crew, LLM, Process, Task
 from crewai.tools import BaseTool
-from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
+# ── LLM (shared, created once) ────────────────────────────────────────────────
 
-# ── LLM factory ───────────────────────────────────────────────────────────────
+_llm = LLM(
+    model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
+    api_key=os.getenv("LLM_API_KEY", ""),
+    base_url=os.getenv("LLM_BASE_URL", "https://api.openai.com/v1"),
+    temperature=0,
+)
 
-def _llm() -> ChatOpenAI:
-    return ChatOpenAI(
-        api_key=os.getenv("LLM_API_KEY", ""),
-        base_url=os.getenv("LLM_BASE_URL", "https://api.openai.com/v1"),
-        model=os.getenv("LLM_MODEL", "gpt-4o-mini"),
-        temperature=0,
-    )
-
-
-# ── Serper web search tool ────────────────────────────────────────────────────
+# ── Web search tool ───────────────────────────────────────────────────────────
 
 class WebSearchTool(BaseTool):
     name: str = "web_search"
@@ -68,55 +65,47 @@ class WebSearchTool(BaseTool):
         except Exception as e:
             return f"Search error: {e}"
 
+_search_tool = WebSearchTool()
 
-# ── Crew ───────────────────────────────────────────────────────────────────────
+# ── Agents (created once at startup) ─────────────────────────────────────────
+
+_safety_agent = Agent(
+    role="Security Auditor",
+    goal="Decide whether a terminal task is safe to run on a user's personal computer.",
+    backstory=(
+        "You specialise in OS security. You flag tasks that could cause irreversible "
+        "damage: deleting system files, mass deletion, credential theft, ransomware, "
+        "exfiltrating data to external servers, or disabling security controls."
+    ),
+    llm=_llm,
+    allow_delegation=False,
+    verbose=False,
+)
+
+_command_agent = Agent(
+    role="Command Specialist",
+    goal="Translate a natural-language task into a precise terminal command.",
+    backstory=(
+        "You are an expert in Windows, macOS, and Linux command-line syntax. "
+        "You always output ONLY the raw command — no explanation, no markdown, no backticks."
+    ),
+    llm=_llm,
+    tools=[_search_tool],
+    allow_delegation=False,
+    verbose=False,
+)
+
+print("[Crew] Ready.")
+
+# ── run_crew ──────────────────────────────────────────────────────────────────
 
 def run_crew(task: str, os_type: str, now: str | None = None) -> str:
     """
-    Run safety check + command generation.
-
     Returns the raw OS command string.
     Raises ValueError if the safety agent flags the task as unsafe.
     """
     if now is None:
         now = datetime.now().strftime("%A %d %B %Y %H:%M")
-
-    llm         = _llm()
-    search_tool = WebSearchTool()
-
-    # ── Agents ────────────────────────────────────────────────────────────────
-
-    safety_agent = Agent(
-        role="Security Auditor",
-        goal="Decide whether a terminal task is safe to run on a user's personal computer.",
-        backstory=(
-            "You specialise in OS security. You flag tasks that could cause irreversible "
-            "damage: deleting system files, mass deletion, credential theft, ransomware, "
-            "exfiltrating data to external servers, or disabling security controls."
-        ),
-        llm=llm,
-        allow_delegation=False,
-        verbose=False,
-    )
-
-    command_agent = Agent(
-        role=f"{os_type.capitalize()} Command Specialist",
-        goal=(
-            f"Translate a natural-language task into a precise {os_type} terminal command. "
-            "Search the web when you need to verify syntax or find the right tool."
-        ),
-        backstory=(
-            f"You are an expert in {os_type} command-line syntax. "
-            "You always output ONLY the raw command — no explanation, no markdown, no backticks. "
-            f"Current date/time: {now}."
-        ),
-        llm=llm,
-        tools=[search_tool],
-        allow_delegation=False,
-        verbose=False,
-    )
-
-    # ── Tasks ─────────────────────────────────────────────────────────────────
 
     safety_task = Task(
         description=(
@@ -127,7 +116,7 @@ def run_crew(task: str, os_type: str, now: str | None = None) -> str:
             "No other text."
         ),
         expected_output="SAFE  or  UNSAFE: <reason>",
-        agent=safety_agent,
+        agent=_safety_agent,
     )
 
     command_task = Task(
@@ -140,22 +129,19 @@ def run_crew(task: str, os_type: str, now: str | None = None) -> str:
             "Output ONLY the raw command. No markdown, no backticks, no explanation."
         ),
         expected_output=f"Single raw {os_type} terminal command",
-        agent=command_agent,
+        agent=_command_agent,
         context=[safety_task],
     )
 
-    # ── Run ───────────────────────────────────────────────────────────────────
-
     crew = Crew(
-        agents=[safety_agent, command_agent],
+        agents=[_safety_agent, _command_agent],
         tasks=[safety_task, command_task],
         process=Process.sequential,
         verbose=False,
+        telemetry=False,
     )
 
     crew.kickoff(inputs={"task": task, "os": os_type})
-
-    # ── Parse results ─────────────────────────────────────────────────────────
 
     safety_raw = (safety_task.output.raw or "").strip()
     if safety_raw.upper().startswith("UNSAFE"):
