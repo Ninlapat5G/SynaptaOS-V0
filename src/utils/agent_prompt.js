@@ -9,9 +9,9 @@ function summarizeDevices(deviceList) {
       if (d.type === 'analog')
         return `${d.name} (${d.room}) — analog | state: ${d.value}/${d.max ?? 255} | pubTopic: ${d.pubTopic}${sub}`
       if (d.type === 'os_terminal')
-        return `${d.name} (${d.room}) — os_terminal (${d.os ?? 'unknown OS'}) | pubTopic: ${d.pubTopic}${sub}`
+        return `${d.name} (${d.room}) — os_terminal | tool: os_command | os: ${d.os ?? 'unknown'} | pubTopic: ${d.pubTopic}${sub}`
       if (d.type === 'hub')
-        return `${d.name} (${d.room}) — hub | agent_name: ${d.agentName ?? d.name} | pubTopic: ${d.pubTopic}`
+        return `${d.name} (${d.room}) — hub | tool: hub | pubTopic: ${d.pubTopic}`
       return `${d.name} (${d.room}) — digital | state: ${d.on ? 'ON' : 'OFF'} | pubTopic: ${d.pubTopic}${sub}`
     }).join('\n') || 'No devices registered'
 }
@@ -30,15 +30,12 @@ export function buildContextMessage(nowStr, visibleDevices, userName) {
     - ONLY IF the user explicitly confirms AND provides a topic, you may proceed to call mqtt_publish.
   2. NO HALLUCINATIONS: ห้ามอ้างว่าทำสำเร็จหรือกำลังดำเนินการ ถ้าไม่ได้เรียก tool จริง — ถ้าไม่เห็น successful tool result ให้บอก user ตรงๆ ว่าไม่ได้ดำเนินการ อย่ามโนว่าได้ทำไปแล้ว
   3. EXPLICIT ARGS: Resolve pronouns (it, this) to the exact device name.
-  4. TOOL SELECTION BY DEVICE TYPE — strictly follow this mapping:
-    - Device type "os_terminal" → use os_command tool
-    - Device type "hub"         → use hub tool (NEVER os_command for hub devices)
-    - Never use os_command on a hub device or vice versa.
+  4. TOOL USAGE: Each device in the list has a "tool:" field — always use exactly that tool for that device. No exceptions.
   5. SEARCH THEN ACT (os_terminal only): ถ้า user ต้องการเปิด/ดู/ฟังสิ่งที่ยังไม่มี URL และ target device เป็น os_terminal:
     - ขั้นที่ 1: ใช้ web_search หา URL ก่อน (เช่น ขอเปิดเพลงหรือคลิป → ค้นหาใน YouTube)
     - ขั้นที่ 2: เมื่อได้ URL แล้ว ใช้ os_command เปิดทันที ไม่ต้องรายงาน URL หรือถามซ้ำ
     - ห้ามหยุดแค่ส่ง URL กลับให้ user — ต้องเปิดให้เลย
-  6. HUB DELEGATION: ถ้า target device เป็น hub ให้ส่ง task ตามที่ user พูดไปยัง hub tool โดยตรง ห้าม web_search ก่อน — hub agent มี tools ของตัวเองและจะค้นหาและดำเนินการเองได้`
+  6. HUB DELEGATION: hub device มี agent ของตัวเองที่ค้นหาและดำเนินการได้ — ส่ง task ตามที่ user พูดไปตรงๆ ห้าม web_search ก่อน`
 }
 
 export function buildOsCommandPrompt(os) {
