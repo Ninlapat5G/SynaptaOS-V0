@@ -7,12 +7,12 @@ function summarizeDevices(deviceList) {
     .map(d => {
       const sub = d.subTopic ? ` | subTopic: ${d.subTopic}` : ''
       if (d.type === 'analog')
-        return `${d.name} (${d.room}) — analog | state: ${d.value}/${d.max ?? 255} | pubTopic: ${d.pubTopic}${sub}`
+        return `${d.name} (${d.room}) — analog | tool: mqtt_publish / mqtt_read | state: ${d.value}/${d.max ?? 255} | pubTopic: ${d.pubTopic}${sub}`
       if (d.type === 'os_terminal')
         return `${d.name} (${d.room}) — os_terminal | tool: os_command | os: ${d.os ?? 'unknown'} | pubTopic: ${d.pubTopic}${sub}`
       if (d.type === 'hub')
         return `${d.name} (${d.room}) — hub | tool: hub | pubTopic: ${d.pubTopic}`
-      return `${d.name} (${d.room}) — digital | state: ${d.on ? 'ON' : 'OFF'} | pubTopic: ${d.pubTopic}${sub}`
+      return `${d.name} (${d.room}) — digital | tool: mqtt_publish / mqtt_read | state: ${d.on ? 'ON' : 'OFF'} | pubTopic: ${d.pubTopic}${sub}`
     }).join('\n') || 'No devices registered'
 }
 
