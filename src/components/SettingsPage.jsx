@@ -139,7 +139,18 @@ export default function SettingsPage({ settings, onSave, mqttStatus = 'offline',
             </div>
             <div className="sh-grid2">
               <div className="sh-field">
-                <label className="mono">API Key</label>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <label className="mono" style={{ marginBottom: 0 }}>API Key</label>
+                  <a
+                    href="https://playground.opentyphoon.ai/settings/api-key"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mono"
+                    style={{ fontSize: 10, color: 'var(--accent)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 3 }}
+                  >
+                    <Icon name="external" size={9} /> รับ API Key
+                  </a>
+                </div>
                 <input
                   type="password"
                   value={s.apiKey}
@@ -230,12 +241,23 @@ export default function SettingsPage({ settings, onSave, mqttStatus = 'offline',
               <div><h3>Integrations</h3><p>API Keys สำหรับ skills ที่ต้องการบริการภายนอก</p></div>
             </div>
             <div className="sh-field">
-              <label className="mono">
-                Serper API Key
-                <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--ink-xdim)', fontWeight: 400 }}>
-                  web_search skill · รับ key ฟรีที่ serper.dev · Free tier: 2,500 queries
-                </span>
-              </label>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                <label className="mono" style={{ marginBottom: 0 }}>
+                  Serper API Key
+                  <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--ink-xdim)', fontWeight: 400 }}>
+                    web_search skill · Free tier: 2,500 queries
+                  </span>
+                </label>
+                <a
+                  href="https://serper.dev/api-keys"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mono"
+                  style={{ fontSize: 10, color: 'var(--accent)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0 }}
+                >
+                  <Icon name="external" size={9} /> รับ API Key
+                </a>
+              </div>
               <input
                 type="password"
                 value={s.serperApiKey || ''}

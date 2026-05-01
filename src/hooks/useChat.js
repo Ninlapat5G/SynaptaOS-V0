@@ -14,6 +14,8 @@ export function useChat({ settings, devicesRef, executeTool }) {
       abortControllerRef.current.abort()
       abortControllerRef.current = null
     }
+    setThinking(false)
+    setExecuting([])
   }, [])
 
   const sendMessage = useCallback(async text => {

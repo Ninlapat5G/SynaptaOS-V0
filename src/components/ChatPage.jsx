@@ -22,7 +22,10 @@ export default function ChatPage({
 
       recognition.onresult = (event) => {
         const transcript = event.results[0][0].transcript;
-        setDraft((prev) => (prev ? prev + ' ' + transcript : transcript));
+        if (transcript.trim()) {
+          onSend(transcript.trim())
+          setDraft('')
+        }
       };
 
       recognition.onend = () => {
