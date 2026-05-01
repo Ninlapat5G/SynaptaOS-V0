@@ -98,7 +98,7 @@ export default function ChatPage({
           ) : (
             <>
               <div className="sh-side-timestamp mono">— บทสนทนา —</div>
-              {messages.map((m, i) => <ChatBubble key={i} msg={m} />)}
+              {messages.map((m, i) => <ChatBubble key={i} msg={m} assistantName={assistantName} />)}
             </>
           )}
 
@@ -116,7 +116,7 @@ export default function ChatPage({
           </AnimatePresence>
 
           <AnimatePresence>
-            {thinking && executing.length === 0 && <TypingBubble key="typing" />}
+            {thinking && executing.length === 0 && <TypingBubble key="typing" assistantName={assistantName} />}
           </AnimatePresence>
         </div>
 

@@ -17,7 +17,7 @@ const AvatarLogo = () => (
   <img src="/logo.jpg" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />
 )
 
-export default function ChatBubble({ msg }) {
+export default function ChatBubble({ msg, assistantName = 'Assistant' }) {
   if (msg.role === 'tool') {
     return <ToolPill name={msg.name} args={msg.args} result={msg.result} round={msg.round} />
   }
@@ -42,7 +42,7 @@ export default function ChatBubble({ msg }) {
         </motion.div>
       )}
       <div className="sh-msg-bubble">
-        {!isUser && <div className="sh-msg-who mono">ASSISTANT</div>}
+        {!isUser && <div className="sh-msg-who mono">{assistantName.toUpperCase()}</div>}
         <div className="sh-msg-text">
           {isUser
             ? msg.text
@@ -54,7 +54,7 @@ export default function ChatBubble({ msg }) {
   )
 }
 
-export function TypingBubble() {
+export function TypingBubble({ assistantName = 'Assistant' }) {
   return (
     <motion.div
       className="sh-msg ai"
@@ -67,7 +67,7 @@ export function TypingBubble() {
         <img src="/logo.jpg" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} />
       </div>
       <div className="sh-msg-bubble">
-        <div className="sh-msg-who mono">ASSISTANT</div>
+        <div className="sh-msg-who mono">{assistantName.toUpperCase()}</div>
         <div className="sh-typing">
           <span /><span /><span />
         </div>
