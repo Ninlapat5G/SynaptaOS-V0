@@ -1,9 +1,8 @@
 """
 SynaptaOS Hub Agent
 ===================
-Runs on a remote computer. Connects to MQTT broker, waits for tasks,
-runs CrewAI (safety check + web search + command generation),
-executes the command, and streams output back line-by-line.
+Connects to MQTT, receives natural language tasks, runs a ReAct loop
+(os_exec + web_search), and streams results back line-by-line.
 
 Topic layout (auto-built from MQTT_BASE_TOPIC + AGENT_NAME):
   cmd    : {base}/hub/{AGENT_NAME}/cmd
@@ -15,24 +14,24 @@ Every response ends with "(mqtt_end)".
 
 import os
 import platform
-import subprocess
 import threading
-from datetime import datetime
 from pathlib import Path
 
 import paho.mqtt.client as mqtt
 from dotenv import load_dotenv
+
 from crew import run_crew
+from tools import os_exec
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
-# ── Config ────────────────────────────────────────────────────────────────────
+# ── Config ─────────────────────────────────────────────────────────────────────
 
-BROKER  = os.getenv("MQTT_BROKER",     "broker.hivemq.com")
-PORT    = int(os.getenv("MQTT_PORT",   "1883"))
-USE_TLS = os.getenv("MQTT_USE_TLS",    "false").lower() == "true"
-BASE    = os.getenv("MQTT_BASE_TOPIC", "").rstrip("/")
-AGENT   = os.getenv("AGENT_NAME",      "hub-agent")
+BROKER  = os.getenv("MQTT_BROKER",      "broker.hivemq.com")
+PORT    = int(os.getenv("MQTT_PORT",    "1883"))
+USE_TLS = os.getenv("MQTT_USE_TLS",     "false").lower() == "true"
+BASE    = os.getenv("MQTT_BASE_TOPIC",  "").rstrip("/")
+AGENT   = os.getenv("AGENT_NAME",       "hub-agent")
 TIMEOUT = float(os.getenv("COMMAND_TIMEOUT", "60"))
 
 _OS_MAP = {"Windows": "windows", "Darwin": "mac", "Linux": "linux"}
@@ -47,15 +46,13 @@ CMD_TOPIC    = _t(f"hub/{AGENT}/cmd")
 OUTPUT_TOPIC = _t(f"hub/{AGENT}/output")
 CANCEL_TOPIC = _t(f"hub/{AGENT}/cancel")
 
-# ── State ─────────────────────────────────────────────────────────────────────
+# ── State ──────────────────────────────────────────────────────────────────────
 
-_client:    mqtt.Client | None      = None
-_proc:      subprocess.Popen | None = None
-_task_lock  = threading.Lock()   # one task at a time
-_proc_lock  = threading.Lock()   # protects _proc reference
-_kill_event = threading.Event()  # set by _cancel, checked by _handle_task
+_client:    mqtt.Client | None = None
+_task_lock  = threading.Lock()
+_kill_event = threading.Event()
 
-# ── MQTT helpers ──────────────────────────────────────────────────────────────
+# ── MQTT helpers ───────────────────────────────────────────────────────────────
 
 def _pub(text: str) -> None:
     if _client:
@@ -63,63 +60,11 @@ def _pub(text: str) -> None:
 
 
 def _end(msg: str = "") -> None:
-    """Publish optional message then the end-of-stream marker."""
     if msg:
         _pub(msg)
     _pub("(mqtt_end)")
 
-
-# ── Subprocess executor ────────────────────────────────────────────────────────
-
-def _run(command: str) -> str | None:
-    """
-    Execute command, stream stdout line-by-line.
-    Returns an error string on failure, None on success or cancel.
-    Never publishes (mqtt_end) — caller owns that.
-    """
-    global _proc
-
-    print(f"[Hub] $ {command}")
-
-    try:
-        with _proc_lock:
-            _proc = subprocess.Popen(
-                command,
-                shell=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-            )
-
-        for line in _proc.stdout:
-            if _kill_event.is_set():
-                break
-            stripped = line.rstrip()
-            print(stripped)
-            _pub(stripped)
-
-        if _kill_event.is_set():
-            return None  # caller handles the cancel message
-
-        try:
-            _proc.wait(timeout=TIMEOUT)
-        except subprocess.TimeoutExpired:
-            _proc.kill()
-            return f"[error] Timed out after {TIMEOUT:.0f}s"
-
-    except Exception as e:
-        return f"[error] {e}"
-
-    finally:
-        with _proc_lock:
-            _proc = None
-
-    return None  # success
-
-
-# ── Task handler ──────────────────────────────────────────────────────────────
+# ── Task handler ───────────────────────────────────────────────────────────────
 
 def _handle_task(task: str) -> None:
     if not _task_lock.acquire(blocking=False):
@@ -127,48 +72,28 @@ def _handle_task(task: str) -> None:
         return
 
     _kill_event.clear()
+    print(f"\n[Hub] Task: {task}")
 
     try:
-        now = datetime.now().strftime("%A %d %B %Y %H:%M")
-        print(f"\n[Hub] Task: {task}")
-
-        try:
-            command = run_crew(task=task, os_type=OS_TYPE, now=now)
-        except ValueError as e:
-            _end(f"[safety] {e}")
-            return
-        except Exception as e:
-            _end(f"[crew error] {e}")
-            return
-
-        if _kill_event.is_set():
-            _end("[cancelled]")
-            return
-
-        err = _run(command)
-
-        if _kill_event.is_set():
-            _end("[cancelled]")
-        elif err:
-            _end(err)
-        else:
-            _pub("(mqtt_end)")
-
+        result = run_crew(
+            task=task,
+            os_type=OS_TYPE,
+            pub=_pub,
+            kill_event=_kill_event,
+            timeout=TIMEOUT,
+        )
+        _end(result)
+    except Exception as e:
+        _end(f"[error] {e}")
     finally:
         _task_lock.release()
-
 
 # ── Cancel ─────────────────────────────────────────────────────────────────────
 
 def _cancel() -> None:
-    global _proc
-    with _proc_lock:
-        p = _proc
-    if p:
-        print("[Hub] Cancel received — killing process")
-        _kill_event.set()
-        p.kill()
-
+    print("[Hub] Cancel received")
+    _kill_event.set()
+    os_exec.cancel()
 
 # ── MQTT callbacks ─────────────────────────────────────────────────────────────
 
@@ -176,7 +101,7 @@ def _on_connect(client, userdata, flags, rc, properties=None):
     if rc == 0:
         client.subscribe(CMD_TOPIC,    qos=1)
         client.subscribe(CANCEL_TOPIC, qos=1)
-        print(f"[Hub] Connected")
+        print("[Hub] Connected")
         print(f"      CMD    : {CMD_TOPIC}")
         print(f"      OUTPUT : {OUTPUT_TOPIC}")
         print(f"      CANCEL : {CANCEL_TOPIC}")
@@ -196,8 +121,7 @@ def _on_message(client, userdata, msg):
 def _on_disconnect(client, userdata, rc, properties=None):
     print(f"[Hub] Disconnected rc={rc} — will reconnect…")
 
-
-# ── Main ──────────────────────────────────────────────────────────────────────
+# ── Main ───────────────────────────────────────────────────────────────────────
 
 def main():
     global _client
