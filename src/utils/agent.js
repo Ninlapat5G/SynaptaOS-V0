@@ -69,7 +69,7 @@ async function agentNode(state) {
     digital:     ['mqtt_publish', 'mqtt_read'],
     analog:      ['mqtt_publish', 'mqtt_read'],
     os_terminal:  ['os_command'],
-    ws_terminal:  ['remote_shell'],
+    hub:          ['hub'],
   }
   const visibleDevices = (deviceList || []).filter(d => {
     const required = deviceTypeAccess[d.type]

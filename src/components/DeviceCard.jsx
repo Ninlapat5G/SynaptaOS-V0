@@ -240,11 +240,13 @@ function EditTerminalCard({ device, onUpdate, onRemove, areas, onCancel }) {
   )
 }
 
-// ── Edit: WsTerminal device ────────────────────────────────────────────────────
+// ── Edit: Hub device ──────────────────────────────────────────────────────────
 
-function EditWsTerminalCard({ device, onUpdate, onRemove, areas, onCancel }) {
+function EditHubCard({ device, onUpdate, onRemove, areas, onCancel }) {
   const [draft, setDraft] = useState(device)
   const set = patch => setDraft(d => ({ ...d, ...patch }))
+
+  const pubErr = topicError(draft.pubTopic)
 
   return (
     <motion.div
@@ -254,7 +256,7 @@ function EditWsTerminalCard({ device, onUpdate, onRemove, areas, onCancel }) {
       transition={{ duration: 0.15 }}
     >
       <div className="sh-card-edit-head">
-        <span className="sh-card-edit-eye mono">EDIT WS TERMINAL</span>
+        <span className="sh-card-edit-eye mono">EDIT HUB</span>
         <button className="sh-card-gear" style={{ opacity: 1 }} onClick={onCancel}>
           <Icon name="close" size={13} />
         </button>
@@ -281,8 +283,32 @@ function EditWsTerminalCard({ device, onUpdate, onRemove, areas, onCancel }) {
             className="mono"
           />
         </label>
-        <div className="sh-builtin-note mono" style={{ marginTop: 4 }}>
-          ต้องตรงกับชื่อที่ terminal agent ลงทะเบียนกับ MCP server
+        <div className="sh-field">
+          <span className="mono">MQTT TOPICS</span>
+          <div className="flex flex-col gap-1.5 mt-1">
+            <div className="flex items-center gap-2">
+              <span className="sh-topic-tag mono">PUB</span>
+              <input
+                value={draft.pubTopic || ''}
+                onChange={e => set({ pubTopic: e.target.value })}
+                placeholder="hub/office-pc/cmd"
+                style={pubErr ? { borderColor: 'oklch(0.65 0.22 25)' } : {}}
+              />
+            </div>
+            {pubErr && (
+              <span className="mono" style={{ fontSize: 10, color: 'oklch(0.72 0.22 25)', paddingLeft: 40 }}>
+                ⚠ {pubErr}
+              </span>
+            )}
+            <div className="flex items-center gap-2">
+              <span className="sh-topic-tag sub mono">SUB</span>
+              <input
+                value={draft.subTopic || ''}
+                onChange={e => set({ subTopic: e.target.value })}
+                placeholder="hub/office-pc/output"
+              />
+            </div>
+          </div>
         </div>
       </div>
       <div className="sh-card-edit-foot">
@@ -291,7 +317,8 @@ function EditWsTerminalCard({ device, onUpdate, onRemove, areas, onCancel }) {
         <button className="sh-btn-ghost" onClick={onCancel}>Cancel</button>
         <button
           className="sh-btn-primary"
-          onClick={() => { onUpdate(draft); onCancel() }}
+          disabled={!!pubErr}
+          onClick={() => { if (!pubErr) { onUpdate(draft); onCancel() } }}
         >
           Save
         </button>
@@ -300,9 +327,9 @@ function EditWsTerminalCard({ device, onUpdate, onRemove, areas, onCancel }) {
   )
 }
 
-// ── WsTerminal widget ──────────────────────────────────────────────────────────
+// ── Hub widget ─────────────────────────────────────────────────────────────────
 
-function WsTerminalCard({ device, onEdit }) {
+function HubCard({ device, onEdit }) {
   return (
     <motion.div
       className="sh-card"
@@ -312,7 +339,7 @@ function WsTerminalCard({ device, onEdit }) {
     >
       <div className="sh-card-top">
         <div className="sh-card-icon">
-          <Icon name="terminal" size={20} />
+          <Icon name="sparkle" size={20} />
           <span className="sh-card-status-dot" style={{ background: 'var(--accent)' }} />
         </div>
         <div className="sh-card-meta">
@@ -327,8 +354,18 @@ function WsTerminalCard({ device, onEdit }) {
       </div>
       <div className="sh-card-topics">
         <span className="sh-card-topic-chip mono" style={{ color: 'var(--accent)' }}>
-          <b>MCP</b>{device.agentName || device.name}
+          <b>HUB</b>{device.agentName || device.name}
         </span>
+        {device.pubTopic && (
+          <span className="sh-card-topic-chip" title={device.pubTopic}>
+            <b>PUB</b>{device.pubTopic}
+          </span>
+        )}
+        {device.subTopic && (
+          <span className="sh-card-topic-chip sub" title={device.subTopic}>
+            <b>SUB</b>{device.subTopic}
+          </span>
+        )}
       </div>
     </motion.div>
   )
@@ -428,8 +465,8 @@ const DeviceCard = memo(function DeviceCard({ device, onUpdate, onRemove, areas,
   if (editing) {
     if (device.type === 'os_terminal')
       return <EditTerminalCard device={device} onUpdate={onUpdate} onRemove={onRemove} areas={areas} onCancel={() => setEditing(false)} />
-    if (device.type === 'ws_terminal')
-      return <EditWsTerminalCard device={device} onUpdate={onUpdate} onRemove={onRemove} areas={areas} onCancel={() => setEditing(false)} />
+    if (device.type === 'hub')
+      return <EditHubCard device={device} onUpdate={onUpdate} onRemove={onRemove} areas={areas} onCancel={() => setEditing(false)} />
     return <EditCard device={device} onUpdate={onUpdate} onRemove={onRemove} areas={areas} onCancel={() => setEditing(false)} />
   }
 
@@ -444,8 +481,8 @@ const DeviceCard = memo(function DeviceCard({ device, onUpdate, onRemove, areas,
     )
   }
 
-  if (device.type === 'ws_terminal') {
-    return <WsTerminalCard device={device} onEdit={() => setEditing(true)} />
+  if (device.type === 'hub') {
+    return <HubCard device={device} onEdit={() => setEditing(true)} />
   }
 
   return (
@@ -665,31 +702,42 @@ export function AddTerminalTile({ onCreate, defaultArea }) {
   )
 }
 
-// ── Add WsTerminal tile (MCP / WebSocket backend) ─────────────────────────────
+// ── Add Hub tile ──────────────────────────────────────────────────────────────
 
-export function AddWsTerminalTile({ onCreate, defaultArea }) {
+export function AddHubTile({ onCreate, defaultArea }) {
   const [forming, setForming] = useState(false)
   const [name, setName] = useState('')
   const [agentName, setAgentName] = useState('')
+  const [pubTopic, setPubTopic] = useState('')
+  const [subTopic, setSubTopic] = useState('')
 
   useEffect(() => {
-    if (name.trim()) setAgentName(name.trim().toLowerCase().replace(/\s+/g, '-'))
-    else setAgentName('')
+    if (name.trim()) {
+      const slug = name.trim().toLowerCase().replace(/\s+/g, '-')
+      setAgentName(slug)
+      setPubTopic(`hub/${slug}/cmd`)
+      setSubTopic(`hub/${slug}/output`)
+    } else {
+      setAgentName(''); setPubTopic(''); setSubTopic('')
+    }
   }, [name])
 
-  const reset = () => { setForming(false); setName(''); setAgentName('') }
+  const reset = () => { setForming(false); setName(''); setAgentName(''); setPubTopic(''); setSubTopic('') }
+
+  const pubErr = topicError(pubTopic)
 
   const save = () => {
-    const trimName      = name.trim()
-    const trimAgentName = agentName.trim()
-    if (!trimName || !trimAgentName) return
+    const trimName = name.trim()
+    if (!trimName || !agentName.trim() || !pubTopic.trim() || pubErr) return
     onCreate({
-      id:        'wst-' + Date.now().toString(36),
+      id:        'hub-' + Date.now().toString(36),
       name:      trimName,
       room:      defaultArea || 'Living Room',
-      type:      'ws_terminal',
-      agentName: trimAgentName,
-      icon:      'terminal',
+      type:      'hub',
+      agentName: agentName.trim(),
+      icon:      'sparkle',
+      pubTopic:  pubTopic.trim(),
+      subTopic:  subTopic.trim(),
     })
     reset()
   }
@@ -703,7 +751,7 @@ export function AddWsTerminalTile({ onCreate, defaultArea }) {
         transition={{ duration: 0.15 }}
       >
         <div className="sh-card-edit-head">
-          <span className="sh-card-edit-eye mono">NEW WS TERMINAL</span>
+          <span className="sh-card-edit-eye mono">NEW HUB</span>
           <button className="sh-card-gear" style={{ opacity: 1 }} onClick={reset}>
             <Icon name="close" size={13} />
           </button>
@@ -722,8 +770,32 @@ export function AddWsTerminalTile({ onCreate, defaultArea }) {
               className="mono"
             />
           </label>
-          <div className="sh-builtin-note mono" style={{ marginTop: 4 }}>
-            ต้องตรงกับชื่อที่ terminal agent ใช้เมื่อเชื่อมกับ MCP server
+          <div className="sh-field">
+            <span className="mono">MQTT TOPICS</span>
+            <div className="flex flex-col gap-1.5 mt-1">
+              <div className="flex items-center gap-2">
+                <span className="sh-topic-tag mono">PUB</span>
+                <input
+                  value={pubTopic}
+                  onChange={e => setPubTopic(e.target.value)}
+                  placeholder="hub/office-pc/cmd"
+                  style={pubErr ? { borderColor: 'oklch(0.65 0.22 25)' } : {}}
+                />
+              </div>
+              {pubErr && (
+                <span className="mono" style={{ fontSize: 10, color: 'oklch(0.72 0.22 25)', paddingLeft: 40 }}>
+                  ⚠ {pubErr}
+                </span>
+              )}
+              <div className="flex items-center gap-2">
+                <span className="sh-topic-tag sub mono">SUB</span>
+                <input
+                  value={subTopic}
+                  onChange={e => setSubTopic(e.target.value)}
+                  placeholder="hub/office-pc/output"
+                />
+              </div>
+            </div>
           </div>
         </div>
         <div className="sh-card-edit-foot">
@@ -731,7 +803,7 @@ export function AddWsTerminalTile({ onCreate, defaultArea }) {
           <button className="sh-btn-ghost" onClick={reset}>Cancel</button>
           <button
             className="sh-btn-primary"
-            disabled={!name.trim() || !agentName.trim()}
+            disabled={!name.trim() || !agentName.trim() || !pubTopic.trim() || !!pubErr}
             onClick={save}
           >
             Add
@@ -750,9 +822,9 @@ export function AddWsTerminalTile({ onCreate, defaultArea }) {
       transition={{ type: 'spring', stiffness: 400, damping: 30 }}
     >
       <div className="sh-add-inner">
-        <div className="sh-add-plus"><Icon name="terminal" size={22} /></div>
-        <div className="sh-add-label">Add WS Terminal</div>
-        <div className="sh-add-sub mono" style={{ color: 'var(--accent)' }}>MCP · CrewAI · beta</div>
+        <div className="sh-add-plus"><Icon name="sparkle" size={22} /></div>
+        <div className="sh-add-label">Add Hub</div>
+        <div className="sh-add-sub mono">AI · CrewAI · MQTT</div>
       </div>
     </motion.button>
   )

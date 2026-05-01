@@ -10,8 +10,8 @@ function summarizeDevices(deviceList) {
         return `${d.name} (${d.room}) — analog | state: ${d.value}/${d.max ?? 255} | pubTopic: ${d.pubTopic}${sub}`
       if (d.type === 'os_terminal')
         return `${d.name} (${d.room}) — os_terminal (${d.os ?? 'unknown OS'}) | pubTopic: ${d.pubTopic}${sub}`
-      if (d.type === 'ws_terminal')
-        return `${d.name} (${d.room}) — ws_terminal | agent_name: ${d.agentName ?? d.name}`
+      if (d.type === 'hub')
+        return `${d.name} (${d.room}) — hub | agent_name: ${d.agentName ?? d.name} | pubTopic: ${d.pubTopic}`
       return `${d.name} (${d.room}) — digital | state: ${d.on ? 'ON' : 'OFF'} | pubTopic: ${d.pubTopic}${sub}`
     }).join('\n') || 'No devices registered'
 }

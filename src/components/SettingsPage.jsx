@@ -34,7 +34,6 @@ export default function SettingsPage({ settings, onSave, mqttStatus = 'offline',
   const toggleSkill  = id       => save(p => ({ ...p, skills: p.skills.map(sk => sk.id === id ? { ...sk, enabled: !sk.enabled } : sk) }))
   const updateSkill  = (id, patch) => save(p => ({ ...p, skills: p.skills.map(sk => sk.id === id ? { ...sk, ...patch } : sk) }))
   const removeSkill  = id       => save(p => ({ ...p, skills: p.skills.filter(sk => sk.id !== id) }))
-  const setRemote    = (k, v)   => save(p => ({ ...p, [k]: v }))
 
   const addSkill = () => {
     const id = 'skill-' + Date.now().toString(36)
@@ -190,39 +189,6 @@ export default function SettingsPage({ settings, onSave, mqttStatus = 'offline',
                     </div>
                     <Toggle on={sk.enabled} onChange={() => toggleSkill(sk.id)} />
                   </div>
-                  {sk.name === 'remote_shell' && (
-                    <details className="sh-skill-details" style={{ borderTop: '1px solid var(--border)', marginTop: 8, paddingTop: 8 }}>
-                      <summary className="mono" style={{ color: 'var(--accent)' }}>
-                        Backend · <strong>{s.remoteShellBackend === 'mcp' ? 'MCP Server (beta)' : 'Browser (MQTT)'}</strong>
-                      </summary>
-                      <div className="sh-grid2 mt-2">
-                        <div className="sh-field">
-                          <label className="mono">Mode</label>
-                          <div className="sh-seg flex">
-                            {['browser', 'mcp'].map(b => (
-                              <button key={b} type="button"
-                                className={s.remoteShellBackend === b ? 'on' : ''}
-                                onClick={() => setRemote('remoteShellBackend', b)}
-                              >{b === 'mcp' ? 'MCP Server (beta)' : 'Browser'}</button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                      {s.remoteShellBackend === 'mcp' && (
-                        <div className="sh-field mt-2">
-                          <label className="mono">MCP Server URL</label>
-                          <input
-                            value={s.mcpServerUrl || 'http://localhost:8000'}
-                            onChange={e => setRemote('mcpServerUrl', e.target.value)}
-                            placeholder="http://localhost:8000"
-                          />
-                          <div className="mono" style={{ fontSize: 10, color: 'var(--ink-xdim)', marginTop: 4 }}>
-                            รัน: <code>conda run -n crew-agent python mcp_server/server.py</code>
-                          </div>
-                        </div>
-                      )}
-                    </details>
-                  )}
                   <details className="sh-skill-details">
                     <summary className="mono">Edit definition</summary>
                     <div className="sh-grid2 mt-2">

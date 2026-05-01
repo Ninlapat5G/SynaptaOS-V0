@@ -10,7 +10,6 @@
 //   3. Add its definition to DEFAULT_SETTINGS.skills in data.js
 
 import { generateSearchQuery } from './agent.js'
-import { remoteShell } from './remoteShell.js'
 
 const SERPER_URL = 'https://google.serper.dev/search'
 
@@ -21,16 +20,16 @@ async function mqttPublish(args, ctx) {
 
   const { topic, payload } = args
 
-  // os_terminal devices are controlled exclusively by the os_command tool.
-  // Reject any attempt to reach them via mqtt_publish.
-  const terminalMatch = devicesRef.current.find(
-    d => d.type === 'os_terminal' &&
+  // os_terminal and hub devices have dedicated tools — block direct publish.
+  const reservedMatch = devicesRef.current.find(
+    d => (d.type === 'os_terminal' || d.type === 'hub') &&
       (d.pubTopic === topic || d.pubTopic?.endsWith('/' + topic))
   )
-  if (terminalMatch) {
+  if (reservedMatch) {
+    const toolName = reservedMatch.type === 'hub' ? 'hub' : 'os_command'
     return {
       success: false,
-      error: `"${terminalMatch.name}" is a terminal device — use the os_command tool instead of mqtt_publish`,
+      error: `"${reservedMatch.name}" is a ${reservedMatch.type} device — use the ${toolName} tool instead of mqtt_publish`,
     }
   }
 
@@ -80,9 +79,9 @@ async function mqttRead(args, ctx) {
   const topic = typeof args === 'string' ? args.trim() : args?.topic
   if (!topic) return { success: false, error: 'No topic specified' }
 
-  // os_terminal devices are write-only via os_command — not readable here
+  // os_terminal and hub devices are not readable via mqtt_read
   const device = devicesRef.current.find(
-    d => d.type !== 'os_terminal' && (
+    d => d.type !== 'os_terminal' && d.type !== 'hub' && (
       d.pubTopic === topic || d.subTopic === topic ||
       d.pubTopic?.endsWith('/' + topic) || d.subTopic?.endsWith('/' + topic)
     )
@@ -142,6 +141,48 @@ async function osCommand(args, ctx) {
   return { success: true, summary: `Ran: ${command}\n\n${output || '(no output)'}${timeoutNote}` }
 }
 
+async function hubCommand(args, ctx) {
+  const { mqttClient, devicesRef, baseTopicRef,
+    mqttWaitForStream, normalizeBase, buildFullTopic } = ctx
+
+  const { task, agent_name, wait_output } = args
+  if (!mqttClient) return { success: false, error: 'MQTT not connected' }
+  if (!task || !agent_name) return { success: false, error: 'Missing args: task, agent_name' }
+
+  const device = devicesRef.current.find(
+    d => d.type === 'hub' && (d.agentName === agent_name || d.name === agent_name)
+  )
+  if (!device)       return { success: false, error: `Hub agent '${agent_name}' not found in device list` }
+  if (!device.pubTopic) return { success: false, error: `Hub device '${agent_name}' has no pubTopic` }
+
+  const base        = normalizeBase(baseTopicRef.current)
+  const fullTopic   = buildFullTopic(device.pubTopic, base)
+  const outputTopic = wait_output && device.subTopic
+    ? buildFullTopic(device.subTopic, base)
+    : null
+
+  const streamPromise = outputTopic ? mqttWaitForStream(outputTopic, 60000) : null
+
+  try {
+    await new Promise((resolve, reject) =>
+      mqttClient.publish(fullTopic, task, { qos: 2 }, err => err ? reject(err) : resolve())
+    )
+  } catch (err) {
+    return { success: false, error: err.message }
+  }
+
+  if (!streamPromise) return { success: true, summary: `Task sent to ${agent_name}: ${task}` }
+
+  const { chunks, timedOut } = await streamPromise
+  const output = chunks.join('\n')
+
+  if (timedOut && chunks.length === 0)
+    return { success: true, summary: `Task sent to ${agent_name}\n\n⚠️ ไม่ได้รับผลลัพธ์ — hub agent อาจออฟไลน์อยู่` }
+
+  const note = timedOut ? '\n\n⚠️ ไม่ได้รับ (mqtt_end) — hub agent อาจขาดการเชื่อมต่อ' : ''
+  return { success: true, summary: `${output || '(no output)'}${note}` }
+}
+
 async function webSearch(args, ctx) {
   const { settings } = ctx
   const { query } = args
@@ -195,10 +236,10 @@ async function webSearch(args, ctx) {
 
 const toolHandlers = {
   mqtt_publish: mqttPublish,
-  mqtt_read: mqttRead,
-  os_command: osCommand,
-  web_search: webSearch,
-  remote_shell: remoteShell,
+  mqtt_read:    mqttRead,
+  os_command:   osCommand,
+  hub:          hubCommand,
+  web_search:   webSearch,
 }
 
 // ── Factory ────────────────────────────────────────────────────────────────────

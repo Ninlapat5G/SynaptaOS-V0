@@ -14,7 +14,7 @@ import { useDevices } from './hooks/useDevices'
 import { useAreas } from './hooks/useAreas'
 
 import Nav, { MobileTopbar, MobileBottomNav } from './components/Nav'
-import DeviceCard, { AddDeviceTile, AddTerminalTile, AddWsTerminalTile } from './components/DeviceCard'
+import DeviceCard, { AddDeviceTile, AddTerminalTile, AddHubTile } from './components/DeviceCard'
 import ChatPage from './components/ChatPage'
 import SettingsPage from './components/SettingsPage'
 import TweaksPanel from './components/TweaksPanel'
@@ -249,7 +249,7 @@ export default function App() {
                       defaultArea={areas[0] || 'Living Room'}
                       onCreate={device => setDevices(prev => [...prev, device])}
                     />
-                    <AddWsTerminalTile
+                    <AddHubTile
                       defaultArea={areas[0] || 'Living Room'}
                       onCreate={device => setDevices(prev => [...prev, device])}
                     />

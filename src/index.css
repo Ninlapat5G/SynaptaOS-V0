@@ -8,11 +8,18 @@
    THEME TOKENS
 ═══════════════════════════════════════════════════════════ */
 :root {
-  --accent-h: 175;
-  --accent-c: 0.15;
+  --accent-h: 192;
+  --accent-c: 0.20;
   --accent-l: 0.72;
-  --accent:   oklch(var(--accent-l) var(--accent-c) var(--accent-h));
+  --accent:      oklch(var(--accent-l) var(--accent-c) var(--accent-h));
   --accent-glow: oklch(var(--accent-l) var(--accent-c) var(--accent-h) / 0.25);
+
+  /* Purple accent — used in gradient elements */
+  --accent-2:    oklch(0.68 0.22 285);
+  --gradient:    linear-gradient(135deg, oklch(0.72 0.20 192), oklch(0.68 0.22 285));
+  --gradient-glow: linear-gradient(135deg,
+    oklch(0.72 0.20 192 / 0.35),
+    oklch(0.68 0.22 285 / 0.35));
 }
 
 [data-theme='dark'] {
@@ -176,7 +183,7 @@
   }
   .sh-nav-item-rail {
     @apply absolute right-0 top-1.5 bottom-1.5 w-0.5 rounded-full;
-    background: var(--accent);
+    background: var(--gradient);
   }
   .sh-nav-status {
     @apply mx-3 mt-2 mb-2 rounded-xl p-3 space-y-1.5 text-[10px];
@@ -266,8 +273,8 @@
     padding: 2px;
   }
   .sh-toggle.on {
-    background: oklch(var(--accent-l) var(--accent-c) var(--accent-h) / 0.85);
-    box-shadow: 0 0 12px var(--accent-glow);
+    background: var(--gradient);
+    box-shadow: 0 0 12px oklch(0.70 0.21 238 / 0.35);
   }
   .sh-toggle-thumb {
     @apply w-5 h-5 rounded-full bg-white shadow-md relative z-10;
@@ -634,8 +641,8 @@
   .sh-tool::before {
     content: '';
     @apply absolute left-0 top-0 bottom-0 w-0.5;
-    background: var(--accent);
-    box-shadow: 0 0 10px var(--accent);
+    background: var(--gradient);
+    box-shadow: 0 0 10px oklch(0.70 0.21 238 / 0.5);
   }
   .sh-tool-head { @apply flex items-center gap-2 mb-2 flex-wrap; }
   .sh-tool-badge {
@@ -680,10 +687,10 @@
   .sh-send {
     @apply w-10 h-10 rounded-xl flex items-center justify-center shrink-0 cursor-pointer
            transition-all duration-150;
-    background: var(--accent);
+    background: var(--gradient);
     color: oklch(0.08 0.01 230);
     border: none;
-    box-shadow: 0 0 16px oklch(var(--accent-l) var(--accent-c) var(--accent-h) / 0.35);
+    box-shadow: 0 0 20px oklch(0.70 0.21 238 / 0.4);
   }
   .sh-send:hover   { filter: brightness(1.1); }
   .sh-send:disabled { opacity: 0.35; cursor: not-allowed; box-shadow: none; }
@@ -706,10 +713,16 @@
   .sh-sect-head { @apply flex items-start gap-3; }
   .sh-sect-num {
     @apply text-[10px] tracking-widest px-2 py-1 rounded-lg;
-    background: oklch(var(--accent-l) var(--accent-c) var(--accent-h) / 0.12);
-    color: var(--accent);
-    border: 1px solid oklch(var(--accent-l) var(--accent-c) var(--accent-h) / 0.3);
+    background: linear-gradient(135deg,
+      oklch(0.72 0.20 192 / 0.15),
+      oklch(0.68 0.22 285 / 0.15));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    border: 1px solid oklch(0.70 0.21 238 / 0.3);
     white-space: nowrap;
+    /* fallback for non-webkit */
+    color: var(--accent);
   }
   .sh-sect h3 { @apply text-base font-semibold m-0; color: var(--ink); }
   .sh-sect p  { @apply text-sm mt-0.5 m-0; color: var(--ink-dim); }
