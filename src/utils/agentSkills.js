@@ -152,11 +152,10 @@ async function hubCommand(args, ctx) {
     mqttWaitForStream, normalizeBase, buildFullTopic, signal } = ctx
 
   // เปลี่ยนมารับ topic แทน
-  const { task, topic, wait_output } = args
+  const { task, topic } = args
   if (!mqttClient) return { success: false, error: 'MQTT not connected' }
   if (!task || !topic) return { success: false, error: 'Missing args: task, topic' }
 
-  // หา Device จาก topic ให้เป๊ะๆ
   const base = normalizeBase(baseTopicRef.current)
   const fullTopic = buildFullTopic(topic, base)
   const device = devicesRef.current.find(
@@ -165,7 +164,7 @@ async function hubCommand(args, ctx) {
   if (!device) return { success: false, error: `Hub device with topic '${topic}' not found in device list` }
   if (!device.pubTopic) return { success: false, error: `Hub device '${device.name}' has no pubTopic` }
 
-  const outputTopic = wait_output && device.subTopic
+  const outputTopic = device.subTopic
     ? buildFullTopic(device.subTopic, base)
     : null
 
