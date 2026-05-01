@@ -57,6 +57,7 @@ def run(
     kill_event: threading.Event,
     timeout: float = 60,
     now: str | None = None,
+    system_info: str = "",
 ) -> str:
     """
     Run the ReAct loop for a given task.
@@ -68,8 +69,12 @@ def run(
 
     os_exec.reset_cwd()
 
+    sys_content = _SYSTEM.format(os_type=os_type, now=now)
+    if system_info:
+        sys_content += f"\n\n[MACHINE SPECS]\n{system_info}"
+
     messages: list[dict] = [
-        {"role": "system", "content": _SYSTEM.format(os_type=os_type, now=now)},
+        {"role": "system", "content": sys_content},
         {"role": "user",   "content": task},
     ]
 
