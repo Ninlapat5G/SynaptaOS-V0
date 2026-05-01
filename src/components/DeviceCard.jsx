@@ -278,7 +278,14 @@ function EditHubCard({ device, onUpdate, onRemove, areas, onCancel }) {
           <span className="mono">AGENT NAME</span>
           <input
             value={draft.agentName || ''}
-            onChange={e => set({ agentName: e.target.value })}
+            onChange={e => {
+              const a = e.target.value
+              set({
+                agentName: a,
+                pubTopic:  a.trim() ? `hub/${a.trim()}/cmd`    : draft.pubTopic,
+                subTopic:  a.trim() ? `hub/${a.trim()}/output` : draft.subTopic,
+              })
+            }}
             placeholder="office-pc"
             className="mono"
           />
@@ -713,14 +720,17 @@ export function AddHubTile({ onCreate, defaultArea }) {
 
   useEffect(() => {
     if (name.trim()) {
-      const slug = name.trim().toLowerCase().replace(/\s+/g, '-')
-      setAgentName(slug)
-      setPubTopic(`hub/${slug}/cmd`)
-      setSubTopic(`hub/${slug}/output`)
+      setAgentName(name.trim().toLowerCase().replace(/\s+/g, '-'))
     } else {
-      setAgentName(''); setPubTopic(''); setSubTopic('')
+      setAgentName('')
     }
   }, [name])
+
+  useEffect(() => {
+    const a = agentName.trim()
+    setPubTopic(a ? `hub/${a}/cmd` : '')
+    setSubTopic(a ? `hub/${a}/output` : '')
+  }, [agentName])
 
   const reset = () => { setForming(false); setName(''); setAgentName(''); setPubTopic(''); setSubTopic('') }
 
