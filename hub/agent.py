@@ -19,11 +19,12 @@ import platform
 import subprocess
 import sys
 from datetime import datetime
+from pathlib import Path
 
 import paho.mqtt.client as mqtt
 from dotenv import load_dotenv
 
-load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 # ── Config ────────────────────────────────────────────────────────────────────
 

@@ -13,6 +13,7 @@ Raises ValueError if the safety agent flags the task as unsafe.
 import os
 import json
 from datetime import datetime
+from pathlib import Path
 
 import requests
 from crewai import Agent, Crew, Process, Task
@@ -20,7 +21,7 @@ from crewai.tools import BaseTool
 from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv
 
-load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 
 # ── LLM factory ───────────────────────────────────────────────────────────────
