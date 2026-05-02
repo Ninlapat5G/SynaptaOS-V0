@@ -80,21 +80,24 @@ export function useSettings() {
   }, [settings.systemPrompt])
 
   // Extract display name from userBio; keeps last known name if nothing found.
-  // Skips on reload when bio hasn't changed (same pattern as systemPrompt detection).
+  // Skips only when bio matches cache AND displayName is already set.
+  // If extraction returns empty or fails, cache is NOT marked — allows retry on next bio change.
   useEffect(() => {
     const bio = settings.profile?.userBio
     if (!bio) return
-    if (bio === (localStorage.getItem(LAST_DETECTED_BIO_KEY) || '')) return
+    const lastBio = localStorage.getItem(LAST_DETECTED_BIO_KEY) || ''
+    if (bio === lastBio && !!settings.profile?.displayName) return
 
     const timer = setTimeout(async () => {
       const s = settingsRef.current
       const currentBio = s.profile?.userBio
-      if (currentBio === (localStorage.getItem(LAST_DETECTED_BIO_KEY) || '')) return
+      const alreadyDone = currentBio === (localStorage.getItem(LAST_DETECTED_BIO_KEY) || '')
+      if (alreadyDone && !!s.profile?.displayName) return
 
       try {
         const name = await extractNameFromText(currentBio, s)
-        localStorage.setItem(LAST_DETECTED_BIO_KEY, currentBio)
         if (!name) return
+        localStorage.setItem(LAST_DETECTED_BIO_KEY, currentBio)
         setSettings(prev => {
           if (prev.profile?.displayName === name) return prev
           const next = { ...prev, profile: { ...prev.profile, displayName: name } }
@@ -105,7 +108,7 @@ export function useSettings() {
     }, 500)
 
     return () => clearTimeout(timer)
-  }, [settings.profile?.userBio]) // eslint-disable-line
+  }, [settings.profile?.userBio, settings.profile?.displayName]) // eslint-disable-line
 
   const handleSaveSettings = useCallback(s => {
     setSettings(s)
