@@ -548,7 +548,7 @@
   }
   .sh-side-head {
     @apply flex items-center justify-between px-5 py-4 shrink-0;
-    background: oklch(0.10 0.010 230 / 0.90);
+    background: color-mix(in srgb, var(--panel) 92%, transparent);
     border-bottom: 1px solid var(--line);
   }
   .sh-side-title { @apply flex items-center gap-3; }
