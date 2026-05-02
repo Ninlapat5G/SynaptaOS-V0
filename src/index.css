@@ -720,15 +720,13 @@
   .sh-sect-num {
     @apply text-[10px] tracking-widest px-2 py-1 rounded-lg;
     background: linear-gradient(135deg,
-      oklch(0.72 0.20 192 / 0.15),
-      oklch(0.68 0.22 285 / 0.15));
+      oklch(0.78 0.22 192),
+      oklch(0.72 0.26 285));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    border: 1px solid oklch(0.70 0.21 238 / 0.3);
+    border: 1px solid oklch(0.70 0.21 238 / 0.5);
     white-space: nowrap;
-    /* fallback for non-webkit */
-    color: var(--accent);
   }
   .sh-sect h3 { @apply text-base font-semibold m-0; color: var(--ink); }
   .sh-sect p  { @apply text-sm mt-0.5 m-0; color: var(--ink-dim); }
