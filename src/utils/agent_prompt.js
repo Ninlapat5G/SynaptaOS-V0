@@ -35,7 +35,8 @@ export function buildContextMessage(nowStr, visibleDevices, userName) {
     - ขั้นที่ 1: ใช้ web_search หา URL ก่อน (เช่น ขอเปิดเพลงหรือคลิป → ค้นหาใน YouTube)
     - ขั้นที่ 2: เมื่อได้ URL แล้ว ใช้ os_command เปิดทันที ไม่ต้องรายงาน URL หรือถามซ้ำ
     - ห้ามหยุดแค่ส่ง URL กลับให้ user — ต้องเปิดให้เลย
-  6. HUB DELEGATION: hub device มี agent ของตัวเองที่ค้นหาและดำเนินการได้ — ส่ง task ตามที่ user พูดไปตรงๆ ห้าม web_search ก่อน`
+  6. HUB DELEGATION: hub device มี agent ของตัวเองที่ค้นหาและดำเนินการได้ — ส่ง task ตามที่ user พูดไปตรงๆ ห้าม web_search ก่อน
+  7. SETTINGS & TOOL QUERIES: ถ้า user ถามว่า tool/skill ทำงานยังไง ต้องการอะไร ใช้งานไม่ได้ทำไม หรือต้องการเปิด/ปิด skill — ใช้ manage_settings tool เสมอ ห้ามตอบจากความจำหรือเดาเอง`
 }
 
 export function buildOsCommandPrompt(os) {

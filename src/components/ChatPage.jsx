@@ -81,9 +81,11 @@ export default function ChatPage({
               <span className="sh-chip">{skillCount} tools</span>
               <span className="sh-chip sh-nav-live"><i />live</span>
             </div>
-            <button className="sh-icon-btn sh-clear-btn" onClick={onClear} title="Clear chat">
-              <Icon name="trash" size={15} />
-            </button>
+            {onClear && (
+              <button className="sh-icon-btn sh-clear-btn" onClick={onClear} title="Clear chat">
+                <Icon name="trash" size={15} />
+              </button>
+            )}
           </div>
         </div>
 

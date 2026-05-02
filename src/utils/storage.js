@@ -1,7 +1,8 @@
 const KEYS = {
-  SETTINGS: 'sh_settings',
-  DEVICES:  'sh_devices',
-  AREAS:    'sh_areas',
+  SETTINGS:   'sh_settings',
+  DEVICES:    'sh_devices',
+  AREAS:      'sh_areas',
+  ONBOARDING: 'sh_onboarding',
 }
 
 const ls = {
@@ -24,5 +25,8 @@ export const loadDevices = ()  => ls.get(KEYS.DEVICES)
 
 export const saveAreas = arr => ls.set(KEYS.AREAS, arr)
 export const loadAreas = ()  => ls.get(KEYS.AREAS)
+
+export const saveOnboarding = obj => ls.set(KEYS.ONBOARDING, obj)
+export const loadOnboarding = ()  => ls.get(KEYS.ONBOARDING)
 
 export const clearAll = () => Object.values(KEYS).forEach(k => ls.del(k))

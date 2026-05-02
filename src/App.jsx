@@ -12,6 +12,8 @@ import { useChat } from './hooks/useChat'
 import { useSettings } from './hooks/useSettings'
 import { useDevices } from './hooks/useDevices'
 import { useAreas } from './hooks/useAreas'
+import { useOnboarding } from './hooks/useOnboarding'
+import { loadOnboarding } from './utils/storage'
 
 import Nav, { MobileTopbar, MobileBottomNav } from './components/Nav'
 import DeviceCard, { AddDeviceTile, AddTerminalTile, AddHubTile } from './components/DeviceCard'
@@ -40,6 +42,12 @@ export default function App() {
   const [toast, setToast] = useState(null)
 
   useEffect(() => { localStorage.setItem('sh-page', page) }, [page])
+
+  // ── Redirect to chat on first visit (while onboarding not complete) ──────────
+  useEffect(() => {
+    const saved = loadOnboarding()
+    if (!saved?.completed) setPage('chat')
+  }, []) // eslint-disable-line
 
   // ── Settings ──────────────────────────────────────────────────────────────────
   const { settings, handleSaveSettings, baseTopicRef } = useSettings()
@@ -74,8 +82,9 @@ export default function App() {
       mqttClient, sensorCache, settings, mqttWaitForMessage, mqttWaitForStream,
       devicesRef, baseTopicRef, setDevices,
       normalizeBase, buildFullTopic, generateOsCommand,
+      handleSaveSettings,
     }),
-    [mqttClient, sensorCache, settings, mqttWaitForMessage, mqttWaitForStream]
+    [mqttClient, sensorCache, settings, mqttWaitForMessage, mqttWaitForStream, handleSaveSettings]
   )
 
   // ── Raw MQTT publish (used by DeviceCard terminal widget) ─────────────────────
@@ -92,6 +101,20 @@ export default function App() {
     devicesRef,
     executeTool,
   })
+
+  // ── Onboarding ────────────────────────────────────────────────────────────────
+  const onboarding = useOnboarding({
+    settings,
+    handleSaveSettings,
+    onComplete: useCallback(() => setPage('chat'), []),
+  })
+
+  // Trigger ซิน greeting when user lands on chat page
+  useEffect(() => {
+    if (page === 'chat' && onboarding.active) {
+      onboarding.triggerGreeting()
+    }
+  }, [page, onboarding.active]) // eslint-disable-line
 
   // ── Theme tokens ──────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -268,18 +291,20 @@ export default function App() {
               <motion.div key="chat" className="h-full" {...pageVariants}>
                 <ErrorBoundary>
                   <ChatPage
-                    messages={messages}
-                    onSend={sendMessage}
+                    messages={onboarding.active ? onboarding.messages : messages}
+                    onSend={onboarding.active ? onboarding.send : sendMessage}
                     onStop={stopChat}
-                    thinking={thinking}
-                    executing={executing}
-                    onClear={clearChat}
+                    thinking={onboarding.active ? onboarding.thinking : thinking}
+                    executing={onboarding.active ? [] : executing}
+                    onClear={onboarding.active ? null : clearChat}
                     modelName={modelShort}
                     skillCount={skillCount}
-                    msgCount={messages.filter(m => m.role === 'user').length}
+                    msgCount={onboarding.active
+                      ? onboarding.messages.filter(m => m.role === 'user').length
+                      : messages.filter(m => m.role === 'user').length}
                     draft={chatDraft}
                     onDraftChange={setChatDraft}
-                    assistantName={settings.profile?.assistantName || 'Assistant'}
+                    assistantName={onboarding.active ? 'ซิน' : (settings.profile?.assistantName || 'ซิน')}
                   />
                 </ErrorBoundary>
               </motion.div>

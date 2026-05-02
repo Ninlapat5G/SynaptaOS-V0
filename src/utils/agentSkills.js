@@ -10,6 +10,7 @@
 //   3. Add its definition to DEFAULT_SETTINGS.skills in data.js
 
 import { generateSearchQuery } from './agent.js'
+import { runSettingsAgent } from './settingsAgent.js'
 
 const SERPER_URL = 'https://google.serper.dev/search'
 
@@ -244,14 +245,29 @@ async function webSearch(args, ctx) {
   return { success: true, query: optimizedQuery, summary }
 }
 
+async function manageSettings(args, ctx) {
+  const { settings, handleSaveSettings, signal } = ctx
+  const { query } = args
+  if (!query) return { success: false, error: 'No query provided' }
+
+  const response = await runSettingsAgent({
+    query,
+    settings,
+    onSettingsChange: handleSaveSettings,
+    signal,
+  })
+  return { success: true, response }
+}
+
 // ── Registry ───────────────────────────────────────────────────────────────────
 
 const toolHandlers = {
-  mqtt_publish: mqttPublish,
-  mqtt_read: mqttRead,
-  os_command: osCommand,
-  hub: hubCommand,
-  web_search: webSearch,
+  mqtt_publish:    mqttPublish,
+  mqtt_read:       mqttRead,
+  os_command:      osCommand,
+  hub:             hubCommand,
+  web_search:      webSearch,
+  manage_settings: manageSettings,
 }
 
 // ── Factory ────────────────────────────────────────────────────────────────────

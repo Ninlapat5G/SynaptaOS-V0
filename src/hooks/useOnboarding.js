@@ -1,0 +1,231 @@
+/**
+ * useOnboarding — จัดการ state ของ onboarding flow กับ "ซิน"
+ *
+ * active = true   → ใช้ messages + send จาก hook นี้แทน main chat
+ * active = false  → onboarding เสร็จแล้ว ใช้ main chat ปกติ
+ *
+ * เงื่อนไขปิด:  apiKey ≠ DEFAULT_API_KEY && apiKey ≠ '' && testApiKey() === true
+ * Reset:        clearAll() จาก Settings ล้าง sh_onboarding → onboarding กลับมาเอง
+ */
+
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { DEFAULT_API_KEY } from '../config/default_key'
+import { loadOnboarding, saveOnboarding } from '../utils/storage'
+import { runSin, extractNameFromText, testApiKey } from '../utils/onboardingAgent'
+
+// ── Stage Contexts ─────────────────────────────────────────────────────────────
+// ข้อความ system context ที่บอกซินว่าตอนนี้อยู่ขั้นไหน
+
+const STAGE_CONTEXTS = {
+  greeting: `[สถานการณ์] นี่คือครั้งแรกที่ user เปิดใช้งาน SynaptaOS
+ให้ซินทักทาย แนะนำตัวเองว่าชื่อ "ซิน" เป็น AI ของระบบ SynaptaOS
+บอกสั้นๆ ว่าซินจะช่วยอะไรได้บ้าง แล้วจบด้วยการถามว่า "อยากให้เรียกว่าอะไรดีคะ?"`,
+
+  awaiting_name: `[สถานการณ์] ซินถามชื่อ user ไปแล้ว กำลังรับคำตอบอยู่
+เมื่อได้ชื่อแล้ว ทักทาย user ด้วยชื่อนั้น
+จากนั้นเรียก inspect_system เพื่อดูสถานะระบบก่อน
+แล้วอธิบาย step ที่ต้องทำ: ไปตั้งค่า Typhoon API key ก่อน (สำคัญที่สุด) พร้อมลิงค์ https://playground.opentyphoon.ai/settings/api-key
+อธิบายว่า Serper API key ทำให้ AI ค้นหาเว็บได้ พร้อมลิงค์ https://serper.dev/api-keys
+บอกว่าตอนนี้ใช้ key ของระบบได้ก่อน แต่ควรใส่ key ส่วนตัวเพื่อประสบการณ์ที่ดีกว่า`,
+
+  setup: `[สถานการณ์] user ใส่ชื่อแล้ว อยู่ในขั้นตอน setup
+ซินช่วยตอบคำถามเกี่ยวกับการตั้งค่าระบบ
+ถ้าไม่แน่ใจสถานะระบบปัจจุบัน เรียก inspect_system ก่อน
+ถ้า user ถามเรื่องที่ซินทำไม่ได้ (ควบคุมอุปกรณ์ ค้นหาเว็บ) บอกให้ไปหน้า Chat ปกติ`,
+
+  farewell: `[สถานการณ์] user ได้ตั้งค่า Typhoon API key ของตัวเองแล้ว ระบบตรวจสอบแล้วว่าใช้งานได้
+ซินจะส่งต่อให้ AI หลัก (ซิน SynaptaOS) ดูแลต่อไป
+ให้ส่ง farewell message ที่อบอุ่น น่ารัก ขำๆ นิดนึง
+บอกว่าซินออกไปแล้ว AI หลักจะเข้ามาแทน
+อาจทิ้ง hint เล็กน้อยเกี่ยวกับ SynaptaOS ที่ทำได้
+จบด้วยคำอำลาสั้นๆ น่ารักๆ`,
+}
+
+// ── Hook ──────────────────────────────────────────────────────────────────────
+
+export function useOnboarding({ settings, handleSaveSettings, onComplete }) {
+  const [completed, setCompleted] = useState(() => loadOnboarding()?.completed || false)
+  const [stage, setStage] = useState(() => loadOnboarding()?.stage || 'greeting')
+
+  const [messages, setMessages] = useState([])
+  const [thinking, setThinking] = useState(false)
+  const [apiHistory, setApiHistory] = useState([])
+
+  const greetingTriggered = useRef(false)
+  const completingRef = useRef(false)
+  const abortRef = useRef(null)
+  const settingsRef = useRef(settings)
+  useEffect(() => { settingsRef.current = settings }, [settings])
+
+  const active = !completed
+
+  // Persist stage
+  useEffect(() => {
+    if (!completed) saveOnboarding({ completed: false, stage })
+  }, [stage, completed])
+
+  // ── Farewell + Deactivation ───────────────────────────────────────────────────
+  useEffect(() => {
+    if (completed || completingRef.current) return
+    const key = settings.apiKey
+    if (!key || key === DEFAULT_API_KEY) return
+
+    completingRef.current = true
+    testApiKey(key, settings.endpoint, settings.model).then(ok => {
+      if (!ok) { completingRef.current = false; return }
+      runFarewell()
+    })
+  }, [settings.apiKey]) // eslint-disable-line
+
+  const runFarewell = useCallback(async () => {
+    setThinking(true)
+    if (abortRef.current) abortRef.current.abort()
+    abortRef.current = new AbortController()
+
+    try {
+      await runSin({
+        stageContext: STAGE_CONTEXTS.farewell,
+        userMessage: null,
+        apiHistory,
+        settings: settingsRef.current,
+        signal: abortRef.current.signal,
+        onStream: streamChunk,
+      })
+      finalizeStream()
+      await new Promise(r => setTimeout(r, 1500))
+    } catch (e) {
+      if (e.name !== 'AbortError') {
+        finalizeStream()
+        setMessages(prev => [...prev, { role: 'ai', text: 'ขอบคุณนะคะ ยินดีด้วย! ซินออกไปแล้ว AI หลักจะดูแลต่อนะคะ 🌸' }])
+        await new Promise(r => setTimeout(r, 1200))
+      }
+    } finally {
+      setThinking(false)
+      setCompleted(true)
+      saveOnboarding({ completed: true, stage: 'done' })
+      onComplete?.()
+    }
+  }, [apiHistory, streamChunk, finalizeStream, onComplete])
+
+  // ── Streaming helpers ─────────────────────────────────────────────────────────
+
+  const streamChunk = useCallback((chunk) => {
+    setThinking(false)
+    setMessages(prev => {
+      const last = prev[prev.length - 1]
+      if (last?.role === 'ai' && last?.streaming) {
+        return [...prev.slice(0, -1), { ...last, text: last.text + chunk }]
+      }
+      return [...prev, { role: 'ai', text: chunk, streaming: true }]
+    })
+  }, [])
+
+  const finalizeStream = useCallback(() => {
+    setMessages(prev => {
+      const last = prev[prev.length - 1]
+      if (last?.streaming) return [...prev.slice(0, -1), { role: 'ai', text: last.text }]
+      return prev
+    })
+  }, [])
+
+  // ── Auto-greeting ─────────────────────────────────────────────────────────────
+
+  const triggerGreeting = useCallback(async () => {
+    if (greetingTriggered.current || !active) return
+    greetingTriggered.current = true
+    setThinking(true)
+
+    abortRef.current = new AbortController()
+    let greetingReply = ''
+    try {
+      await runSin({
+        stageContext: STAGE_CONTEXTS.greeting,
+        userMessage: null,
+        apiHistory: [],
+        settings: settingsRef.current,
+        signal: abortRef.current.signal,
+        onStream: chunk => {
+          greetingReply += chunk
+          streamChunk(chunk)
+        },
+      })
+      finalizeStream()
+      // บันทึก greeting ลง history เพื่อให้ turn ถัดไปมี context
+      if (greetingReply) setApiHistory([{ role: 'assistant', content: greetingReply }])
+      setStage('awaiting_name')
+    } catch (e) {
+      if (e.name !== 'AbortError') {
+        finalizeStream()
+        const fallback = 'สวัสดีค่ะ! หนูชื่อซิน AI ของ SynaptaOS 🌟 อยากให้เรียกว่าอะไรดีคะ?'
+        setMessages(prev => [...prev, { role: 'ai', text: fallback }])
+        setApiHistory([{ role: 'assistant', content: fallback }])
+        setStage('awaiting_name')
+      }
+    } finally {
+      setThinking(false)
+    }
+  }, [active, streamChunk, finalizeStream])
+
+  // ── Send message ──────────────────────────────────────────────────────────────
+
+  const send = useCallback(async (text) => {
+    if (!active || thinking) return
+
+    setMessages(prev => [...prev, { role: 'user', text }])
+    setThinking(true)
+
+    if (abortRef.current) abortRef.current.abort()
+    abortRef.current = new AbortController()
+
+    const currentSettings = settingsRef.current
+    let currentStage = stage
+
+    try {
+      // ── Name extraction stage ──────────────────────────────────────────────
+      if (stage === 'awaiting_name') {
+        const name = await extractNameFromText(text, currentSettings)
+        if (name) {
+          handleSaveSettings({
+            ...currentSettings,
+            profile: { ...currentSettings.profile, userBio: `ชื่อ ${name}` },
+          })
+          currentStage = 'setup'
+          setStage('setup')
+        }
+        // If no name extracted, stay in awaiting_name and ซิน will re-ask
+      }
+
+      const stageCtx = STAGE_CONTEXTS[currentStage] || STAGE_CONTEXTS.setup
+      let reply = ''
+
+      await runSin({
+        stageContext: stageCtx,
+        userMessage: text,
+        apiHistory,
+        settings: currentSettings,
+        signal: abortRef.current.signal,
+        onStream: chunk => {
+          reply += chunk
+          streamChunk(chunk)
+        },
+      })
+      finalizeStream()
+
+      setApiHistory(prev => [
+        ...prev,
+        { role: 'user', content: text },
+        { role: 'assistant', content: reply },
+      ].slice(-20))
+
+    } catch (e) {
+      finalizeStream()
+      if (e.name !== 'AbortError') {
+        setMessages(prev => [...prev, { role: 'ai', text: `⚠️ ${e.message}` }])
+      }
+    } finally {
+      setThinking(false)
+    }
+  }, [active, thinking, stage, apiHistory, handleSaveSettings, streamChunk, finalizeStream])
+
+  return { active, stage, messages, thinking, send, triggerGreeting }
+}

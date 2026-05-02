@@ -7,6 +7,7 @@ import {
   SEARCH_QUERY_PROMPT,
   DETECT_NAME_PROMPT,
 } from "./agent_prompt.js";
+import { DEFAULT_API_KEY } from "../config/default_key";
 
 // ── 0. Helpers ────────────────────────────────────────────────────────────────
 function nowString() {
@@ -78,10 +79,11 @@ async function agentNode(state) {
     return required.some(skill => enabledSkills.has(skill))
   })
 
+  const effectiveKey = settings.apiKey || DEFAULT_API_KEY
   const llm = new ChatOpenAI({
-    apiKey: settings.apiKey,
+    apiKey: effectiveKey,
     configuration: {
-      apiKey: settings.apiKey,
+      apiKey: effectiveKey,
       baseURL: settings.endpoint,
       dangerouslyAllowBrowser: true
     },
@@ -203,9 +205,10 @@ export const runAgent = async (params) => {
 // ── 4. Sub-Agents ────────────────────────────────────────────────────────────
 
 export async function generateOsCommand({ settings, instruction, os, signal }) {
+  const effectiveKey = settings.apiKey || DEFAULT_API_KEY
   const llm = new ChatOpenAI({
-    apiKey: settings.apiKey,
-    configuration: { apiKey: settings.apiKey, baseURL: settings.endpoint, dangerouslyAllowBrowser: true },
+    apiKey: effectiveKey,
+    configuration: { apiKey: effectiveKey, baseURL: settings.endpoint, dangerouslyAllowBrowser: true },
     modelName: settings.model,
     temperature: 0,
   });
@@ -225,9 +228,10 @@ export async function generateOsCommand({ settings, instruction, os, signal }) {
 }
 
 export async function generateSearchQuery({ settings, query, signal }) {
+  const effectiveKey = settings.apiKey || DEFAULT_API_KEY
   const llm = new ChatOpenAI({
-    apiKey: settings.apiKey,
-    configuration: { apiKey: settings.apiKey, baseURL: settings.endpoint, dangerouslyAllowBrowser: true },
+    apiKey: effectiveKey,
+    configuration: { apiKey: effectiveKey, baseURL: settings.endpoint, dangerouslyAllowBrowser: true },
     modelName: settings.model,
     temperature: 0.1,
   }).withStructuredOutput({
@@ -252,9 +256,10 @@ export async function generateSearchQuery({ settings, query, signal }) {
 }
 
 export async function detectAssistantName({ settings, systemPrompt, signal }) {
+  const effectiveKey = settings.apiKey || DEFAULT_API_KEY
   const llm = new ChatOpenAI({
-    apiKey: settings.apiKey,
-    configuration: { apiKey: settings.apiKey, baseURL: settings.endpoint, dangerouslyAllowBrowser: true },
+    apiKey: effectiveKey,
+    configuration: { apiKey: effectiveKey, baseURL: settings.endpoint, dangerouslyAllowBrowser: true },
     modelName: settings.model,
     temperature: 0,
   }).withStructuredOutput({

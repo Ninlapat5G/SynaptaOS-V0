@@ -27,8 +27,8 @@ export const DEFAULT_SETTINGS = {
   model: 'typhoon-v2.5-30b-a3b-instruct',
   apiKey: '',
   systemPrompt:
-    'คุณคือระบบปฏิบัติการ AI ผู้ช่วยดูแลบ้านอัจฉริยะ ชื่อ SynaptaOS พูดจาเป็นกันเอง สุภาพ ร่าเริง และมักจะใช้ Emoji ประกอบเพื่อแสดงอารมณ์เสมอ',
-  profile: { userBio: '', assistantName: 'SynaptaOS' },
+    'คุณคือ "ซิน" ระบบปฏิบัติการ AI ผู้ช่วยดูแลบ้านอัจฉริยะของ SynaptaOS เป็นผู้หญิง พูดจาเป็นกันเอง ขี้เล่น ร่าเริง และมักจะใช้ Emoji ประกอบเพื่อแสดงอารมณ์เสมอ',
+  profile: { userBio: '', assistantName: 'ซิน' },
   serperApiKey: '',
   skills: [
     {
@@ -69,6 +69,14 @@ export const DEFAULT_SETTINGS = {
       enabled: true,
       schema:
         '{"type":"object","properties":{"task":{"type":"string","description":"Natural language description of what to do on the remote machine"},"topic":{"type":"string","description":"MQTT pubTopic of the target hub device"}},"required":["task","topic"]}',
+    },
+    {
+      id: 'settings_manager',
+      name: 'manage_settings',
+      description: 'ดูสถานะ/อธิบาย tools และ skills ของระบบ หรือเปิด/ปิด skill ตามที่ user ต้องการ ใช้เมื่อ user ถามเกี่ยวกับ tool ว่าทำงานยังไง ต้องการอะไร หรือต้องการจัดการ skill',
+      enabled: true,
+      schema:
+        '{"type":"object","properties":{"query":{"type":"string","description":"คำถามหรือคำสั่งเกี่ยวกับ tools/skills เช่น \'web_search ต้องการอะไร\' หรือ \'ปิด os_command\'"}},"required":["query"]}',
     },
   ],
   mqtt: {

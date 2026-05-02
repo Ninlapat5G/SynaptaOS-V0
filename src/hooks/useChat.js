@@ -19,15 +19,6 @@ export function useChat({ settings, devicesRef, executeTool }) {
   }, [])
 
   const sendMessage = useCallback(async text => {
-    if (!settings.apiKey) {
-      setMessages(prev => [
-        ...prev,
-        { role: 'user', text },
-        { role: 'ai', text: '⚠️ กรุณาตั้งค่า API Key ในหน้า Settings ก่อนใช้งาน' },
-      ])
-      return
-    }
-
     setMessages(prev => [...prev, { role: 'user', text }])
     setThinking(true)
     setExecuting([])
