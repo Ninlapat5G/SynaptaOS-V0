@@ -187,13 +187,13 @@ export function useOnboarding({ settings, handleSaveSettings, onComplete }) {
     try {
       // ── Name extraction stage ──────────────────────────────────────────────
       if (stage === 'awaiting_name') {
-        const name = await extractNameFromText(text, currentSettings)
+        const { name, initials } = await extractNameFromText(text, currentSettings)
         if (name) {
           const newBio = `ชื่อ ${name}`
           if (newBio !== currentSettings.profile?.userBio || name !== currentSettings.profile?.displayName) {
             handleSaveSettings({
               ...currentSettings,
-              profile: { ...currentSettings.profile, userBio: newBio, displayName: name },
+              profile: { ...currentSettings.profile, userBio: newBio, displayName: name, displayInitials: initials },
             })
           }
           currentStage = 'setup'

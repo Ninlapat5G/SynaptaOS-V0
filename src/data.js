@@ -28,7 +28,7 @@ export const DEFAULT_SETTINGS = {
   apiKey: '',
   systemPrompt:
     'คุณคือ "ซิน" ระบบปฏิบัติการ AI ผู้ช่วยดูแลบ้านอัจฉริยะของ SynaptaOS เป็นผู้หญิง พูดจาเป็นกันเอง ขี้เล่น ร่าเริง และมักจะใช้ Emoji ประกอบเพื่อแสดงอารมณ์เสมอ',
-  profile: { userBio: '', assistantName: 'ซิน', displayName: '' },
+  profile: { userBio: '', assistantName: 'ซิน', displayName: '', displayInitials: '' },
   serperApiKey: '',
   skills: [
     {

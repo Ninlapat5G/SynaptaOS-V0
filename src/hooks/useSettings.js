@@ -95,16 +95,16 @@ export function useSettings() {
       if (alreadyDone && !!s.profile?.displayName) return
 
       try {
-        const name = await extractNameFromText(currentBio, s)
+        const { name, initials } = await extractNameFromText(currentBio, s)
         if (!name) return
         localStorage.setItem(LAST_DETECTED_BIO_KEY, currentBio)
         setSettings(prev => {
-          if (prev.profile?.displayName === name) return prev
-          const next = { ...prev, profile: { ...prev.profile, displayName: name } }
+          if (prev.profile?.displayName === name && prev.profile?.displayInitials === initials) return prev
+          const next = { ...prev, profile: { ...prev.profile, displayName: name, displayInitials: initials } }
           saveSettings(next)
           return next
         })
-      } catch { /* keep current displayName on failure, don't mark as processed */ }
+      } catch { /* keep current values on failure, don't mark as processed */ }
     }, 500)
 
     return () => clearTimeout(timer)

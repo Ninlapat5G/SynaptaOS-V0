@@ -21,7 +21,7 @@ export default function Nav({
   ]
 
   const displayName = profile?.displayName || 'User'
-  const initials = displayName[0]?.toUpperCase() || 'U'
+  const initials = profile?.displayInitials || displayName[0]?.toUpperCase() || 'U'
 
   return (
     <>
