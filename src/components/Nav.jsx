@@ -20,8 +20,11 @@ export default function Nav({
     { id: 'settings', label: 'Settings', icon: 'gear',    badge: null },
   ]
 
-  const initials = (profile?.name || 'U')
-    .trim().split(/\s+/).map(p => p[0]).slice(0, 2).join('').toUpperCase() || 'U'
+  const bio = profile?.userBio || ''
+  const displayName = bio.startsWith('ชื่อ ')
+    ? bio.slice(5).split(/\s+/)[0]
+    : bio.split(/\s+/)[0] || 'User'
+  const initials = displayName[0]?.toUpperCase() || 'U'
 
   return (
     <>
@@ -108,7 +111,7 @@ export default function Nav({
           <div className="sh-user">
             <div className="sh-user-av">{initials}</div>
             <div className="sh-user-meta">
-              <div className="sh-user-name">{profile?.name || 'User'}</div>
+              <div className="sh-user-name">{displayName}</div>
             </div>
           </div>
         </div>

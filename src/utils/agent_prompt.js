@@ -28,7 +28,11 @@ export function buildContextMessage(nowStr, visibleDevices, userName) {
     - You MUST politely inform them that the device is not registered.
     - Ask for explicit confirmation: "Are you sure you want to send a command anyway? If yes, please provide the exact MQTT topic."
     - ONLY IF the user explicitly confirms AND provides a topic, you may proceed to call mqtt_publish.
-  2. NO HALLUCINATIONS: ห้ามอ้างว่าทำสำเร็จหรือกำลังดำเนินการ ถ้าไม่ได้เรียก tool จริง — ถ้าไม่เห็น successful tool result ให้บอก user ตรงๆ ว่าไม่ได้ดำเนินการ อย่ามโนว่าได้ทำไปแล้ว
+  2. NO HALLUCINATIONS — STRICT TOOL CALL ENFORCEMENT:
+    - You MUST actually invoke a tool (generate a tool_call block) before you can claim any action was taken.
+    - NEVER say "ฉันได้สั่ง...", "ฉันเปิด...", "ดำเนินการแล้ว", or any similar phrase unless a tool result appears in the conversation history for this turn.
+    - If you cannot or did not call a tool, tell the user plainly: "ฉันไม่ได้ดำเนินการ เพราะ [reason]."
+    - Thinking about calling a tool is NOT the same as calling it. A tool result must exist in history.
   3. EXPLICIT ARGS: Resolve pronouns (it, this) to the exact device name.
   4. TOOL USAGE: Each device in the list has a "tool:" field — always use exactly that tool for that device. No exceptions.
   5. SEARCH THEN ACT (os_terminal only): ถ้า user ต้องการเปิด/ดู/ฟังสิ่งที่ยังไม่มี URL และ target device เป็น os_terminal:
