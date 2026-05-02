@@ -69,8 +69,7 @@ function makeLLM(settings, withTools = false) {
   return withTools ? llm.bindTools([INSPECT_TOOL]) : llm
 }
 
-// ── Name Extractor (Inspector mini-call) ─────────────────────────────────────
-
+// ── Name Extractor ────────────────────────────────────────────────────────────
 // Returns { name, initials } — both '' if no name found
 export async function extractNameFromText(text, settings) {
   const apiKey = settings.apiKey || DEFAULT_API_KEY

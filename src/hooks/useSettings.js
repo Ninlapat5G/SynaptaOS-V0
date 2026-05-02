@@ -79,9 +79,7 @@ export function useSettings() {
     return () => clearTimeout(timer)
   }, [settings.systemPrompt])
 
-  // Extract display name from userBio; keeps last known name if nothing found.
-  // Skips only when bio matches cache AND displayName is already set.
-  // If extraction returns empty or fails, cache is NOT marked — allows retry on next bio change.
+  // Extract display name from userBio; skips only when bio matches cache AND name is already set.
   useEffect(() => {
     const bio = settings.profile?.userBio
     if (!bio) return
