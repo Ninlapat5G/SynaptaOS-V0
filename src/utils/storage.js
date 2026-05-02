@@ -3,6 +3,7 @@ const KEYS = {
   DEVICES:    'sh_devices',
   AREAS:      'sh_areas',
   ONBOARDING: 'sh_onboarding',
+  TWEAKS:     'sh_tweaks',
 }
 
 const ls = {
@@ -28,5 +29,8 @@ export const loadAreas = ()  => ls.get(KEYS.AREAS)
 
 export const saveOnboarding = obj => ls.set(KEYS.ONBOARDING, obj)
 export const loadOnboarding = ()  => ls.get(KEYS.ONBOARDING)
+
+export const saveTweaks = obj => ls.set(KEYS.TWEAKS, obj)
+export const loadTweaks = ()  => ls.get(KEYS.TWEAKS)
 
 export const clearAll = () => Object.values(KEYS).forEach(k => ls.del(k))

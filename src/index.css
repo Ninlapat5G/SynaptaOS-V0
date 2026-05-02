@@ -8,44 +8,45 @@
    THEME TOKENS
 ═══════════════════════════════════════════════════════════ */
 :root {
-  --accent-h: 192;
-  --accent-c: 0.20;
-  --accent-l: 0.72;
-  --accent:      oklch(var(--accent-l) var(--accent-c) var(--accent-h));
-  --accent-glow: oklch(var(--accent-l) var(--accent-c) var(--accent-h) / 0.25);
+  /* Blue from mascot logo #00d4ff */
+  --accent-h:   201;
+  --accent-c:   0.19;
+  --accent-l:   0.80;
+  --accent:        oklch(var(--accent-l) var(--accent-c) var(--accent-h));
+  --accent-glow:   oklch(var(--accent-l) var(--accent-c) var(--accent-h) / 0.25);
 
-  /* Purple accent — used in gradient elements */
-  --accent-2:    oklch(0.68 0.22 285);
-  --gradient:    linear-gradient(135deg, oklch(0.72 0.20 192), oklch(0.68 0.22 285));
+  /* Purple from mascot logo #b44fff */
+  --accent-2:      oklch(0.62 0.26 291);
+  --gradient:      linear-gradient(135deg, oklch(0.80 0.19 201), oklch(0.62 0.26 291));
   --gradient-glow: linear-gradient(135deg,
-    oklch(0.72 0.20 192 / 0.35),
-    oklch(0.68 0.22 285 / 0.35));
+    oklch(0.80 0.19 201 / 0.35),
+    oklch(0.62 0.26 291 / 0.35));
 }
 
 [data-theme='dark'] {
-  --bg-0:       oklch(0.10 0.010 230);
-  --bg-1:       oklch(0.13 0.012 230);
-  --panel:      oklch(0.15 0.012 230);
-  --card:       oklch(0.18 0.013 230);
-  --card-hover: oklch(0.21 0.013 230);
-  --line:       oklch(0.26 0.010 230 / 0.6);
-  --line-strong:oklch(0.32 0.010 230);
-  --ink:        oklch(0.94 0.008 230);
-  --ink-dim:    oklch(0.70 0.010 230);
-  --ink-xdim:   oklch(0.48 0.010 230);
+  --bg-0:        oklch(0.09 0.018 258);
+  --bg-1:        oklch(0.12 0.020 258);
+  --panel:       oklch(0.14 0.020 258);
+  --card:        oklch(0.17 0.020 258);
+  --card-hover:  oklch(0.20 0.020 258);
+  --line:        oklch(0.28 0.015 258 / 0.6);
+  --line-strong: oklch(0.34 0.015 258);
+  --ink:         oklch(0.94 0.008 240);
+  --ink-dim:     oklch(0.70 0.010 240);
+  --ink-xdim:    oklch(0.48 0.010 240);
 }
 
 [data-theme='light'] {
-  --bg-0:       oklch(0.97 0.006 230);
-  --bg-1:       oklch(0.94 0.008 230);
-  --panel:      oklch(0.98 0.004 230);
-  --card:       oklch(1.00 0.000 230);
-  --card-hover: oklch(0.97 0.006 230);
-  --line:       oklch(0.88 0.006 230);
-  --line-strong:oklch(0.80 0.008 230);
-  --ink:        oklch(0.15 0.015 230);
-  --ink-dim:    oklch(0.38 0.012 230);
-  --ink-xdim:   oklch(0.58 0.010 230);
+  --bg-0:        oklch(0.97 0.008 268);
+  --bg-1:        oklch(0.94 0.010 268);
+  --panel:       oklch(0.98 0.005 268);
+  --card:        oklch(1.00 0.000 260);
+  --card-hover:  oklch(0.96 0.010 268);
+  --line:        oklch(0.86 0.012 268);
+  --line-strong: oklch(0.76 0.014 268);
+  --ink:         oklch(0.18 0.020 260);
+  --ink-dim:     oklch(0.38 0.014 260);
+  --ink-xdim:    oklch(0.56 0.012 260);
 }
 
 /* ─── Density ─── */
@@ -543,8 +544,12 @@
     @apply flex flex-col w-full rounded-2xl overflow-hidden;
     max-width: 880px;
     height: calc(100vh - 48px);
-    background: oklch(0.10 0.010 230 / 0.55);
-    border: 1px solid oklch(0.30 0.015 230 / 0.50);
+    background: oklch(0.09 0.018 258 / 0.55);
+    border: 1px solid oklch(0.80 0.19 201 / 0.20);
+    box-shadow:
+      0 0 0 1px oklch(0.62 0.26 291 / 0.15),
+      0 0 40px 6px oklch(0.80 0.19 201 / 0.10),
+      0 0 80px 16px oklch(0.62 0.26 291 / 0.07);
   }
   .sh-side-head {
     @apply flex items-center justify-between px-5 py-4 shrink-0;
@@ -1119,7 +1124,10 @@
 
 /* mobile overrides */
 @media (max-width: 640px) {
-  .sh-chatpage   { @apply p-2 pt-2 pb-0; }
-  .sh-chat-frame { height: calc(100dvh - 56px - 64px); @apply rounded-2xl; }
-  .sh-board      { @apply p-4; }
+  .sh-chatpage    { @apply p-2 pt-2 pb-0; }
+  .sh-chat-frame  { height: calc(100dvh - 56px - 64px); @apply rounded-2xl; }
+  .sh-board       { @apply p-4; }
+  .sh-settings-page { @apply p-4; }
+  .sh-board-filters { @apply flex-wrap; }
+  .sh-sect-row    { @apply flex-col; }
 }

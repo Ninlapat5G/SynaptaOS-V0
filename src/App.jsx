@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 
 import { INITIAL_TWEAKS } from './data'
-import { clearAll } from './utils/storage'
+import { clearAll, saveTweaks, loadTweaks } from './utils/storage'
 import { normalizeBase, buildFullTopic } from './utils/mqttTopic'
 import { generateOsCommand } from './utils/agent'
 import { createExecuteTool } from './utils/agentSkills'
@@ -34,7 +34,7 @@ const gridVariants = {
 }
 
 export default function App() {
-  const [tweaks, setTweaks] = useState(INITIAL_TWEAKS)
+  const [tweaks, setTweaks] = useState(() => ({ ...INITIAL_TWEAKS, ...loadTweaks() }))
   const [tweaksOpen, setTweaksOpen] = useState(false)
   const [page, setPage] = useState(() => localStorage.getItem('sh-page') || 'devices')
   const [chatDraft, setChatDraft] = useState('')
@@ -124,6 +124,7 @@ export default function App() {
     root.dataset.grid = tweaks.showGrid ? 'on' : 'off'
     root.style.setProperty('--accent-h', tweaks.accentHue)
     root.style.setProperty('--accent-c', tweaks.accentChroma)
+    saveTweaks(tweaks)
   }, [tweaks])
 
   // ── Offline toast ─────────────────────────────────────────────────────────────

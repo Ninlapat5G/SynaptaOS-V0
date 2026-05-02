@@ -89,8 +89,8 @@ export const DEFAULT_SETTINGS = {
 export const INITIAL_AREAS = ['Living Room', 'Kitchen', 'Bedroom', 'Entry', 'Garage']
 export const INITIAL_TWEAKS = {
   theme: 'dark',
-  accentHue: 192,
-  accentChroma: 0.20,
+  accentHue: 201,
+  accentChroma: 0.19,
   density: 'comfortable',
   showGrid: true,
 }
