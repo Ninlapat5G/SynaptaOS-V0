@@ -133,6 +133,9 @@ export function useOnboarding({ settings, handleSaveSettings, onComplete }) {
 
   const triggerGreeting = useCallback(async () => {
     if (greetingTriggered.current || !active) return
+    // If user already has their own key, deactivation effect handles transition — skip intro
+    const key = settingsRef.current?.apiKey
+    if (key && key !== DEFAULT_API_KEY) return
     greetingTriggered.current = true
     setThinking(true)
 
@@ -186,10 +189,13 @@ export function useOnboarding({ settings, handleSaveSettings, onComplete }) {
       if (stage === 'awaiting_name') {
         const name = await extractNameFromText(text, currentSettings)
         if (name) {
-          handleSaveSettings({
-            ...currentSettings,
-            profile: { ...currentSettings.profile, userBio: `ชื่อ ${name}` },
-          })
+          const newBio = `ชื่อ ${name}`
+          if (newBio !== currentSettings.profile?.userBio) {
+            handleSaveSettings({
+              ...currentSettings,
+              profile: { ...currentSettings.profile, userBio: newBio },
+            })
+          }
           currentStage = 'setup'
           setStage('setup')
         }
