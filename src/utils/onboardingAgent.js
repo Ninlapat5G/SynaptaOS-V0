@@ -79,19 +79,14 @@ export async function extractNameFromText(text, settings) {
       configuration: { apiKey, baseURL: settings.endpoint, dangerouslyAllowBrowser: true },
       modelName: settings.model,
       temperature: 0,
-    }).withStructuredOutput({
-      type: 'object',
-      properties: {
-        name: { type: 'string', description: 'ชื่อที่ user อยากให้เรียก ถ้าไม่ชัดเจนให้คืน empty string' },
-      },
-      required: ['name'],
+      maxTokens: 10,
     })
-
     const res = await llm.invoke([
-      new SystemMessage('ดึงชื่อที่ผู้ใช้ต้องการให้เรียก จากข้อความที่ได้รับ ถ้าไม่มีชื่อชัดเจนหรือเป็นแค่คำทักทายให้คืน empty string'),
+      new SystemMessage('ดึงชื่อที่ผู้ใช้ต้องการให้เรียก จากข้อความที่ได้รับ ตอบด้วยชื่อเดียวเท่านั้น ห้ามมีคำอื่น ถ้าไม่มีชื่อชัดเจนตอบว่า NONE'),
       new HumanMessage(text),
     ])
-    return res.name?.trim() || ''
+    const name = typeof res.content === 'string' ? res.content.trim() : ''
+    return name === 'NONE' || !name ? '' : name
   } catch {
     return ''
   }
