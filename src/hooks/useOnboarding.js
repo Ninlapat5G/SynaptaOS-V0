@@ -64,18 +64,28 @@ export function useOnboarding({ settings, handleSaveSettings, onComplete }) {
     if (!completed) saveOnboarding({ completed: false, stage })
   }, [stage, completed])
 
-  // ── Farewell + Deactivation ───────────────────────────────────────────────────
-  useEffect(() => {
-    if (completed || completingRef.current) return
-    const key = settings.apiKey
-    if (!key || key === DEFAULT_API_KEY) return
+  // ── Streaming helpers ─────────────────────────────────────────────────────────
 
-    completingRef.current = true
-    testApiKey(key, settings.endpoint, settings.model).then(ok => {
-      if (!ok) { completingRef.current = false; return }
-      runFarewell()
+  const streamChunk = useCallback((chunk) => {
+    setThinking(false)
+    setMessages(prev => {
+      const last = prev[prev.length - 1]
+      if (last?.role === 'ai' && last?.streaming) {
+        return [...prev.slice(0, -1), { ...last, text: last.text + chunk }]
+      }
+      return [...prev, { role: 'ai', text: chunk, streaming: true }]
     })
-  }, [settings.apiKey]) // eslint-disable-line
+  }, [])
+
+  const finalizeStream = useCallback(() => {
+    setMessages(prev => {
+      const last = prev[prev.length - 1]
+      if (last?.streaming) return [...prev.slice(0, -1), { role: 'ai', text: last.text }]
+      return prev
+    })
+  }, [])
+
+  // ── Farewell + Deactivation ───────────────────────────────────────────────────
 
   const runFarewell = useCallback(async () => {
     setThinking(true)
@@ -107,26 +117,17 @@ export function useOnboarding({ settings, handleSaveSettings, onComplete }) {
     }
   }, [apiHistory, streamChunk, finalizeStream, onComplete])
 
-  // ── Streaming helpers ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (completed || completingRef.current) return
+    const key = settings.apiKey
+    if (!key || key === DEFAULT_API_KEY) return
 
-  const streamChunk = useCallback((chunk) => {
-    setThinking(false)
-    setMessages(prev => {
-      const last = prev[prev.length - 1]
-      if (last?.role === 'ai' && last?.streaming) {
-        return [...prev.slice(0, -1), { ...last, text: last.text + chunk }]
-      }
-      return [...prev, { role: 'ai', text: chunk, streaming: true }]
+    completingRef.current = true
+    testApiKey(key, settings.endpoint, settings.model).then(ok => {
+      if (!ok) { completingRef.current = false; return }
+      runFarewell()
     })
-  }, [])
-
-  const finalizeStream = useCallback(() => {
-    setMessages(prev => {
-      const last = prev[prev.length - 1]
-      if (last?.streaming) return [...prev.slice(0, -1), { role: 'ai', text: last.text }]
-      return prev
-    })
-  }, [])
+  }, [settings.apiKey]) // eslint-disable-line
 
   // ── Auto-greeting ─────────────────────────────────────────────────────────────
 
