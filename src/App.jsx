@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react'
-import chatBg from '../icon/bg.jpg'
 import { AnimatePresence, motion } from 'framer-motion'
 
 import { INITIAL_TWEAKS } from './data'
@@ -184,7 +183,7 @@ export default function App() {
         <main
           className="sh-main"
           style={page === 'chat' ? {
-            backgroundImage: `url(${chatBg})`,
+            backgroundImage: "url('/bg.jpg')",
             backgroundSize: 'cover',
             backgroundPosition: 'center',
             backgroundRepeat: 'no-repeat',
