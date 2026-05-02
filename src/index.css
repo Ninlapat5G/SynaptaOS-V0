@@ -543,9 +543,7 @@
     @apply flex flex-col w-full rounded-2xl overflow-hidden;
     max-width: 880px;
     height: calc(100vh - 48px);
-    background: oklch(0.15 0.012 230 / 0.85);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
+    background: oklch(0.10 0.010 230 / 0.55);
     border: 1px solid oklch(0.30 0.015 230 / 0.50);
   }
   .sh-side-head {
