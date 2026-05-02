@@ -540,13 +540,6 @@
   }
 
   /* ── Chat ── */
-  .sh-main-chat {
-    background-image: url('/bg.jpg') !important;
-    background-size: cover !important;
-    background-position: center !important;
-    background-repeat: no-repeat !important;
-    background-color: transparent !important;
-  }
   .sh-chatpage {
     @apply flex items-start justify-center p-6 h-full;
   }
