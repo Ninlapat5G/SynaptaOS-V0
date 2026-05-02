@@ -44,7 +44,7 @@ void setup() {
         Serial.println("Relay: " + String(on ? "ON" : "OFF"));
     });
 
-    dimmer.onCommand([](int val) {
+    dimmer.onValue([](int val) {
         Serial.println("Dimmer: " + String(val) + "/255");
     });
 }

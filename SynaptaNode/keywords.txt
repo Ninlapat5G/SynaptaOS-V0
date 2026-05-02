@@ -22,6 +22,7 @@ isConnected	KEYWORD2
 onConnect	KEYWORD2
 onDisconnect	KEYWORD2
 onCommand	KEYWORD2
+onValue	KEYWORD2
 attachPin	KEYWORD2
 attachPWM	KEYWORD2
 attachButton	KEYWORD2

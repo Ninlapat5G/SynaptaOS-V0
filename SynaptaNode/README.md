@@ -90,7 +90,8 @@ Topics are derived automatically:
 
 | Method | Description |
 |--------|-------------|
-| `onCommand(cb)` | `NODE_DIGITAL`: `cb(bool on)` — `NODE_ANALOG`: `cb(int value)` |
+| `onCommand(cb)` | `NODE_DIGITAL`: `cb(bool on)` |
+| `onValue(cb)` | `NODE_ANALOG`: `cb(int value)` |
 | `attachPin(pin)` | NODE_DIGITAL: auto GPIO control, no callback needed |
 | `attachPWM(pin)` | NODE_ANALOG: auto PWM via `ledcWrite`, no callback needed |
 | `attachButton(pin)` | Physical toggle button — toggles state + publishes to MQTT |

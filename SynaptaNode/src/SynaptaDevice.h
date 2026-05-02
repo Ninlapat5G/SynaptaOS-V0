@@ -24,11 +24,12 @@ public:
 
     // ── Command handlers ─────────────────────────────────────────────────────
 
-    // Called when Web App sends a command. Use for custom logic.
-    // DIGITAL: callback receives bool (true = on, false = off)
+    // DIGITAL: called when Web App sends a command (on/off)
     void onCommand(std::function<void(bool)> cb);
-    // ANALOG: callback receives int 0–255
-    void onCommand(std::function<void(int)> cb);
+
+    // ANALOG: called when Web App sends a value (0–255)
+    // Named separately to avoid C++ ambiguity (bool is implicitly convertible to int)
+    void onValue(std::function<void(int)> cb);
 
     // Auto-control a GPIO pin with no callback needed.
     // DIGITAL: sets pin HIGH (on) or LOW (off) automatically

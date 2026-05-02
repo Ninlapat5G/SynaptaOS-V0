@@ -14,7 +14,7 @@ SynaptaDevice::SynaptaDevice(const char* id, const char* room, DeviceType type)
 // ── Command handlers ──────────────────────────────────────────────────────────
 
 void SynaptaDevice::onCommand(std::function<void(bool)> cb) { _cbDigital = cb; }
-void SynaptaDevice::onCommand(std::function<void(int)>  cb) { _cbAnalog  = cb; }
+void SynaptaDevice::onValue  (std::function<void(int)>  cb) { _cbAnalog  = cb; }
 
 void SynaptaDevice::attachPin(uint8_t pin) {
     _pin = pin;
