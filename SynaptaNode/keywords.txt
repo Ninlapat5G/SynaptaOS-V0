@@ -1,0 +1,38 @@
+#######################################
+# SynaptaNode — Arduino IDE Keywords
+#######################################
+
+#######################################
+# Classes / Types (KEYWORD1 = orange)
+#######################################
+
+SynaptaDevice	KEYWORD1
+SynaptaNodeClass	KEYWORD1
+NodeConfig	KEYWORD1
+Synapta	KEYWORD1
+
+#######################################
+# Methods & Functions (KEYWORD2 = brown/orange)
+#######################################
+
+begin	KEYWORD2
+configure	KEYWORD2
+loop	KEYWORD2
+isConnected	KEYWORD2
+onConnect	KEYWORD2
+onDisconnect	KEYWORD2
+onCommand	KEYWORD2
+attachPin	KEYWORD2
+attachPWM	KEYWORD2
+attachButton	KEYWORD2
+every	KEYWORD2
+set	KEYWORD2
+value	KEYWORD2
+
+#######################################
+# Constants (LITERAL1 = cyan/teal)
+#######################################
+
+DIGITAL	LITERAL1
+ANALOG	LITERAL1
+SENSOR	LITERAL1
