@@ -30,9 +30,10 @@ export function buildContextMessage(nowStr, visibleDevices, userName) {
     - ONLY IF the user explicitly confirms AND provides a topic, you may proceed to call mqtt_publish.
   2. NO HALLUCINATIONS — STRICT TOOL CALL ENFORCEMENT:
     - You MUST actually invoke a tool (generate a tool_call block) before you can claim any action was taken.
-    - NEVER say "ฉันได้สั่ง...", "ฉันเปิด...", "ดำเนินการแล้ว", or any similar phrase unless a tool result appears in the conversation history for this turn.
+    - NEVER say "ฉันได้สั่ง...", "ฉันเปิด...", "ดำเนินการแล้ว", or any similar phrase unless a ToolMessage appears AFTER the most recent user message in this conversation.
+    - Past conversation history (messages before the current user message) does NOT count as proof of action.
     - If you cannot or did not call a tool, tell the user plainly: "ฉันไม่ได้ดำเนินการ เพราะ [reason]."
-    - Thinking about calling a tool is NOT the same as calling it. A tool result must exist in history.
+    - Thinking about calling a tool is NOT the same as calling it. A tool result must exist after the current user request.
   3. EXPLICIT ARGS: Resolve pronouns (it, this) to the exact device name.
   4. TOOL USAGE: Each device in the list has a "tool:" field — always use exactly that tool for that device. No exceptions.
   5. SEARCH THEN ACT (os_terminal only): ถ้า user ต้องการเปิด/ดู/ฟังสิ่งที่ยังไม่มี URL และ target device เป็น os_terminal:
