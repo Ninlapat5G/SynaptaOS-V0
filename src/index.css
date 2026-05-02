@@ -538,13 +538,19 @@
   /* ── Chat ── */
   .sh-chatpage {
     @apply flex items-start justify-center p-6 h-full;
+    background-image: url('/bg.jpg');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
   }
   .sh-chat-frame {
     @apply flex flex-col w-full rounded-2xl overflow-hidden;
     max-width: 880px;
     height: calc(100vh - 48px);
-    background: var(--panel);
-    border: 1px solid var(--line);
+    background: color-mix(in srgb, var(--panel) 72%, transparent);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
   }
   .sh-side-head {
     @apply flex items-center justify-between px-5 py-4 shrink-0;
