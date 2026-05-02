@@ -53,23 +53,23 @@ void SynaptaDevice::set(int value) {
 }
 
 float SynaptaDevice::value() const {
-    if (_type == DIGITAL) return _stateBool ? 1.0f : 0.0f;
+    if (_type == NODE_DIGITAL) return _stateBool ? 1.0f : 0.0f;
     return _stateFloat;
 }
 
 // ── Internal: called by SynaptaNode on incoming MQTT message ─────────────────
 
 void SynaptaDevice::_handleMessage(const char* payload) {
-    if (_type == DIGITAL) {
+    if (_type == NODE_DIGITAL) {
         bool on = _parseBool(payload);
         _executeDigital(on);
         _publishState();
-    } else if (_type == ANALOG) {
+    } else if (_type == NODE_ANALOG) {
         int val = constrain(_parseInt(payload), 0, 255);
         _executeAnalog(val);
         _publishState();
     }
-    // SENSOR ignores commands — it only publishes, never receives
+    // NODE_SENSOR ignores commands — it only publishes, never receives
 }
 
 // Publish current state to the MQTT state topic (called after reconnect)
@@ -81,7 +81,7 @@ void SynaptaDevice::_reportState() {
 
 void SynaptaDevice::_loop() {
     // ── Sensor interval reporting ─────────────────────────────────────────────
-    if (_type == SENSOR && _cbSensor && _interval > 0) {
+    if (_type == NODE_SENSOR && _cbSensor && _interval > 0) {
         if (millis() - _lastReport >= _interval) {
             _lastReport = millis();
             _stateFloat = _cbSensor();
@@ -144,11 +144,11 @@ void SynaptaDevice::_publishState() {
     String topic = _stateTopic(base);
     String payload;
 
-    if (_type == DIGITAL) {
+    if (_type == NODE_DIGITAL) {
         payload = _stateBool ? "true" : "false";
-    } else if (_type == ANALOG) {
+    } else if (_type == NODE_ANALOG) {
         payload = String((int)_stateFloat);
-    } else {  // SENSOR
+    } else {  // NODE_SENSOR
         payload = String(_stateFloat, 2);  // 2 decimal places
     }
 

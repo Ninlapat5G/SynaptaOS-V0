@@ -42,7 +42,7 @@ The Web AI talks directly to the ESP32. No hub required for device control.
 ```cpp
 #include <Synapta.h>
 
-SynaptaDevice relay("bedroom-relay", "bedroom", DIGITAL);
+SynaptaDevice relay("bedroom-relay", "bedroom", NODE_DIGITAL);
 
 void setup() {
     Synapta.begin("MyWiFi", "MyPassword", "Mylab/smarthome");
@@ -82,7 +82,7 @@ Add the device in the Web App (Settings → Devices → Add):
 |-----------|-------------|
 | `id` | Unique device ID — must match the device configured in the Web App |
 | `room` | Room name, e.g. `"bedroom"` or `"living-room"` |
-| `type` | `DIGITAL`, `ANALOG`, or `SENSOR` |
+| `type` | `NODE_DIGITAL`, `NODE_ANALOG`, or `NODE_SENSOR` |
 
 Topics are derived automatically:
 - **cmd** → `{baseTopic}/{room}/{id}/set` — Web App publishes here
@@ -90,13 +90,13 @@ Topics are derived automatically:
 
 | Method | Description |
 |--------|-------------|
-| `onCommand(cb)` | `DIGITAL`: `cb(bool on)` — `ANALOG`: `cb(int value)` |
-| `attachPin(pin)` | DIGITAL: auto GPIO control, no callback needed |
-| `attachPWM(pin)` | ANALOG: auto PWM via `ledcWrite`, no callback needed |
+| `onCommand(cb)` | `NODE_DIGITAL`: `cb(bool on)` — `NODE_ANALOG`: `cb(int value)` |
+| `attachPin(pin)` | NODE_DIGITAL: auto GPIO control, no callback needed |
+| `attachPWM(pin)` | NODE_ANALOG: auto PWM via `ledcWrite`, no callback needed |
 | `attachButton(pin)` | Physical toggle button — toggles state + publishes to MQTT |
-| `every(ms, cb)` | SENSOR: call `cb()` every `ms` ms, publish returned `float` |
-| `set(bool)` | DIGITAL: set state from code + publish |
-| `set(int)` | ANALOG: set value from code + publish |
+| `every(ms, cb)` | NODE_SENSOR: call `cb()` every `ms` ms, publish returned `float` |
+| `set(bool)` | NODE_DIGITAL: set state from code + publish |
+| `set(int)` | NODE_ANALOG: set value from code + publish |
 | `value()` | Read current state as `float` |
 
 ---
@@ -114,9 +114,9 @@ Topics are derived automatically:
 Integer string `"0"` – `"255"`
 
 ### State reports (`/state`, retain=true)
-- **DIGITAL**: `"true"` or `"false"`
-- **ANALOG**: integer string `"0"` – `"255"`
-- **SENSOR**: float string e.g. `"28.50"`
+- **NODE_DIGITAL**: `"true"` or `"false"`
+- **NODE_ANALOG**: integer string `"0"` – `"255"`
+- **NODE_SENSOR**: float string e.g. `"28.50"`
 
 ---
 
@@ -141,7 +141,7 @@ Rules can be created by the Web App AI at runtime and run **locally on the ESP32
 | `condition.op` | Operator: `>` `<` `>=` `<=` `==` `!=` |
 | `condition.value` | Threshold to compare against |
 | `action.device` | Device ID to control |
-| `action.set` | `true`/`false` for DIGITAL, integer for ANALOG |
+| `action.set` | `true`/`false` for NODE_DIGITAL, integer for NODE_ANALOG |
 | `persist` | `true` = save to NVRAM, `false` = RAM only |
 
 Capacity: up to **20 rules** total.
@@ -169,9 +169,9 @@ For each `SynaptaDevice` in your sketch, add a matching device in the Web App:
 
 | Sketch | Web App pubTopic | Web App subTopic |
 |--------|-----------------|-----------------|
-| `SynaptaDevice("bedroom-relay", "bedroom", DIGITAL)` | `bedroom/bedroom-relay/set` | `bedroom/bedroom-relay/state` |
-| `SynaptaDevice("living-dimmer", "living-room", ANALOG)` | `living-room/living-dimmer/set` | `living-room/living-dimmer/state` |
-| `SynaptaDevice("bedroom-temp", "bedroom", SENSOR)` | *(leave blank)* | `bedroom/bedroom-temp/state` |
+| `SynaptaDevice("bedroom-relay", "bedroom", NODE_DIGITAL)` | `bedroom/bedroom-relay/set` | `bedroom/bedroom-relay/state` |
+| `SynaptaDevice("living-dimmer", "living-room", NODE_ANALOG)` | `living-room/living-dimmer/set` | `living-room/living-dimmer/state` |
+| `SynaptaDevice("bedroom-temp", "bedroom", NODE_SENSOR)` | *(leave blank)* | `bedroom/bedroom-temp/state` |
 
 **Note:** Room names with spaces are normalised automatically: `"Living Room"` → `living-room`.
 

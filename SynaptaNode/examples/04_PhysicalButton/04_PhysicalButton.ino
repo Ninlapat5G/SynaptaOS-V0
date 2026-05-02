@@ -22,7 +22,7 @@
 #include <Synapta.h>
 
 // ── Device Declaration ────────────────────────────────────────────────────────
-SynaptaDevice lamp("bedroom-lamp", "bedroom", DIGITAL);
+SynaptaDevice lamp("bedroom-lamp", "bedroom", NODE_DIGITAL);
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
 void setup() {

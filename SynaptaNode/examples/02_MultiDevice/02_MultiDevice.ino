@@ -21,8 +21,8 @@
 #include <Synapta.h>
 
 // ── Device Declarations ───────────────────────────────────────────────────────
-SynaptaDevice relay ("bedroom-relay",  "bedroom", DIGITAL);
-SynaptaDevice dimmer("bedroom-dimmer", "bedroom", ANALOG);
+SynaptaDevice relay ("bedroom-relay",  "bedroom", NODE_DIGITAL);
+SynaptaDevice dimmer("bedroom-dimmer", "bedroom", NODE_ANALOG);
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
 void setup() {

@@ -22,7 +22,7 @@
 // ── Device Declaration ────────────────────────────────────────────────────────
 // Declaring the device globally auto-registers it.
 // When Synapta.begin() is called, it subscribes to this device's command topic.
-SynaptaDevice relay("bedroom-relay", "bedroom", DIGITAL);
+SynaptaDevice relay("bedroom-relay", "bedroom", NODE_DIGITAL);
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
 void setup() {

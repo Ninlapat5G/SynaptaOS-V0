@@ -50,8 +50,8 @@ DHT dht(15, DHT22);
 
 // ── Device Declarations ───────────────────────────────────────────────────────
 // Both devices must be declared so the RuleEngine can read / set their state.
-SynaptaDevice temp("bedroom-temp", "bedroom", SENSOR);
-SynaptaDevice ac  ("bedroom-ac",   "bedroom", DIGITAL);
+SynaptaDevice temp("bedroom-temp", "bedroom", NODE_SENSOR);
+SynaptaDevice ac  ("bedroom-ac",   "bedroom", NODE_DIGITAL);
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
 void setup() {

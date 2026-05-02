@@ -1,7 +1,7 @@
 /*
  * 03_Sensor — Periodic sensor reporting (DHT22)
  * -----------------------------------------------
- * A SENSOR device does NOT receive commands — it only publishes values.
+ * A NODE_SENSOR device does NOT receive commands — it only publishes values.
  * The Web App AI can read the value with mqtt_read("bedroom/bedroom-temp/state").
  *
  * This example reports temperature every 30 seconds.
@@ -29,8 +29,8 @@
 DHT dht(15, DHT22);  // DATA pin, sensor type
 
 // ── Device Declaration ────────────────────────────────────────────────────────
-// SENSOR type: subscribes to nothing, only publishes to /state
-SynaptaDevice temp("bedroom-temp", "bedroom", SENSOR);
+// NODE_SENSOR type: subscribes to nothing, only publishes to /state
+SynaptaDevice temp("bedroom-temp", "bedroom", NODE_SENSOR);
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
 void setup() {

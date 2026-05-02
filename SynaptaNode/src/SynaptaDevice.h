@@ -3,7 +3,9 @@
 #include <functional>
 #include "SynaptaRegistry.h"
 
-enum DeviceType { DIGITAL, ANALOG, SENSOR };
+// Prefixed to avoid conflicts with ESP32 core macros
+// (esp32-hal-gpio.h defines ANALOG as 0xC0)
+enum DeviceType { NODE_DIGITAL, NODE_ANALOG, NODE_SENSOR };
 
 // Represents one controllable device on this ESP32.
 //
