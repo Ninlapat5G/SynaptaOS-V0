@@ -5,6 +5,7 @@ import { detectAssistantName } from '../utils/agent'
 import { extractNameFromText } from '../utils/onboardingAgent'
 
 const LAST_DETECTED_PROMPT_KEY = 'sh_last_detected_prompt'
+const LAST_DETECTED_BIO_KEY    = 'sh_last_detected_bio'
 
 export function useSettings() {
   const [settings, setSettings] = useState(() => {
@@ -70,7 +71,6 @@ export function useSettings() {
             return next
           })
         }
-        // No name found → keep current assistantName unchanged
       } catch {
         // API failed → keep current name, don't mark as processed (will retry on next change)
       }
@@ -79,16 +79,21 @@ export function useSettings() {
     return () => clearTimeout(timer)
   }, [settings.systemPrompt])
 
-  // Extract display name from userBio whenever it changes.
-  // Only updates displayName if a name is actually found — keeps last known name otherwise.
+  // Extract display name from userBio; keeps last known name if nothing found.
+  // Skips on reload when bio hasn't changed (same pattern as systemPrompt detection).
   useEffect(() => {
     const bio = settings.profile?.userBio
     if (!bio) return
+    if (bio === (localStorage.getItem(LAST_DETECTED_BIO_KEY) || '')) return
 
     const timer = setTimeout(async () => {
       const s = settingsRef.current
+      const currentBio = s.profile?.userBio
+      if (currentBio === (localStorage.getItem(LAST_DETECTED_BIO_KEY) || '')) return
+
       try {
-        const name = await extractNameFromText(bio, s)
+        const name = await extractNameFromText(currentBio, s)
+        localStorage.setItem(LAST_DETECTED_BIO_KEY, currentBio)
         if (!name) return
         setSettings(prev => {
           if (prev.profile?.displayName === name) return prev
@@ -96,7 +101,7 @@ export function useSettings() {
           saveSettings(next)
           return next
         })
-      } catch { /* keep current displayName on failure */ }
+      } catch { /* keep current displayName on failure, don't mark as processed */ }
     }, 500)
 
     return () => clearTimeout(timer)
