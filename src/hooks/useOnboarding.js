@@ -190,10 +190,10 @@ export function useOnboarding({ settings, handleSaveSettings, onComplete }) {
         const name = await extractNameFromText(text, currentSettings)
         if (name) {
           const newBio = `ชื่อ ${name}`
-          if (newBio !== currentSettings.profile?.userBio) {
+          if (newBio !== currentSettings.profile?.userBio || name !== currentSettings.profile?.displayName) {
             handleSaveSettings({
               ...currentSettings,
-              profile: { ...currentSettings.profile, userBio: newBio },
+              profile: { ...currentSettings.profile, userBio: newBio, displayName: name },
             })
           }
           currentStage = 'setup'
