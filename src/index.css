@@ -604,8 +604,8 @@
     color: var(--ink);
   }
   .sh-msg.user .sh-msg-bubble {
-    background: oklch(var(--accent-l) var(--accent-c) var(--accent-h) / 0.14);
-    border: 1px solid oklch(var(--accent-l) var(--accent-c) var(--accent-h) / 0.35);
+    background: oklch(var(--accent-l) var(--accent-c) var(--accent-h) / 0.06);
+    border: 1px solid oklch(var(--accent-l) var(--accent-c) var(--accent-h) / 0.40);
     border-bottom-right-radius: 4px;
     color: var(--ink);
   }
