@@ -20,10 +20,7 @@ export default function Nav({
     { id: 'settings', label: 'Settings', icon: 'gear',    badge: null },
   ]
 
-  const bio = profile?.userBio || ''
-  const displayName = bio.startsWith('ชื่อ ')
-    ? bio.slice(5).split(/\s+/)[0]
-    : bio.split(/\s+/)[0] || 'User'
+  const displayName = profile?.displayName || 'User'
   const initials = displayName[0]?.toUpperCase() || 'U'
 
   return (

@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { DEFAULT_SETTINGS } from '../data'
 import { saveSettings, loadSettings } from '../utils/storage'
 import { detectAssistantName } from '../utils/agent'
+import { extractNameFromText } from '../utils/onboardingAgent'
 
 const LAST_DETECTED_PROMPT_KEY = 'sh_last_detected_prompt'
 
@@ -77,6 +78,29 @@ export function useSettings() {
 
     return () => clearTimeout(timer)
   }, [settings.systemPrompt])
+
+  // Extract display name from userBio whenever it changes.
+  // Only updates displayName if a name is actually found — keeps last known name otherwise.
+  useEffect(() => {
+    const bio = settings.profile?.userBio
+    if (!bio) return
+
+    const timer = setTimeout(async () => {
+      const s = settingsRef.current
+      try {
+        const name = await extractNameFromText(bio, s)
+        if (!name) return
+        setSettings(prev => {
+          if (prev.profile?.displayName === name) return prev
+          const next = { ...prev, profile: { ...prev.profile, displayName: name } }
+          saveSettings(next)
+          return next
+        })
+      } catch { /* keep current displayName on failure */ }
+    }, 500)
+
+    return () => clearTimeout(timer)
+  }, [settings.profile?.userBio]) // eslint-disable-line
 
   const handleSaveSettings = useCallback(s => {
     setSettings(s)
