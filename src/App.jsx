@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 
 import { INITIAL_TWEAKS } from './data'
@@ -94,6 +94,21 @@ export default function App() {
     const fullTopic = buildFullTopic(topic, base)
     mqttClient.publish(fullTopic, String(payload), { qos: 2 })
   }, [mqttClient])
+
+  // ── Device drag-to-reorder ────────────────────────────────────────────────────
+  const dragIdRef = useRef(null)
+
+  const handleDeviceDrop = useCallback(targetId => {
+    if (!dragIdRef.current || dragIdRef.current === targetId) return
+    setDevices(prev => {
+      const arr = [...prev]
+      const from = arr.findIndex(x => x.id === dragIdRef.current)
+      const to   = arr.findIndex(x => x.id === targetId)
+      if (from < 0 || to < 0) return prev
+      arr.splice(to, 0, arr.splice(from, 1)[0])
+      return arr
+    })
+  }, [setDevices])
 
   // ── Chat ──────────────────────────────────────────────────────────────────────
   const { messages, thinking, executing, sendMessage, clearChat, stopChat } = useChat({
@@ -257,14 +272,22 @@ export default function App() {
                 <ErrorBoundary>
                   <motion.div className="sh-grid" variants={gridVariants} initial="hidden" animate="visible">
                     {visibleDevices.map(d => (
-                      <DeviceCard
+                      <div
                         key={d.id}
-                        device={d}
-                        onUpdate={updateDevice}
-                        onRemove={removeDevice}
-                        areas={areas}
-                        onRawPublish={handleRawPublish}
-                      />
+                        draggable
+                        onDragStart={e => { dragIdRef.current = d.id; e.currentTarget.style.opacity = '0.4' }}
+                        onDragEnd={e => { dragIdRef.current = null; e.currentTarget.style.opacity = '' }}
+                        onDragOver={e => e.preventDefault()}
+                        onDrop={() => handleDeviceDrop(d.id)}
+                      >
+                        <DeviceCard
+                          device={d}
+                          onUpdate={updateDevice}
+                          onRemove={removeDevice}
+                          areas={areas}
+                          onRawPublish={handleRawPublish}
+                        />
+                      </div>
                     ))}
                     <AddDeviceTile
                       onClick={() => {

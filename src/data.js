@@ -34,14 +34,14 @@ export const DEFAULT_SETTINGS = {
     {
       id: 'sensor_read',
       name: 'mqtt_read',
-      description: 'Read the current state of a device widget by its MQTT topic. Returns the live value from the UI.',
+      description: 'อ่านสถานะปัจจุบันของ widget อุปกรณ์ผ่าน MQTT topic ส่งคืนค่าที่แสดงผลอยู่ใน UI',
       enabled: true,
       schema: '{"type":"object","properties":{"topic":{"type":"string","description":"pubTopic or subTopic of the device"}},"required":["topic"]}',
     },
     {
       id: 'mqtt_pub',
       name: 'mqtt_publish',
-      description: 'Publish a raw payload to an MQTT topic to control a device.',
+      description: 'ส่ง payload ไปยัง MQTT topic เพื่อควบคุมอุปกรณ์',
       enabled: true,
       schema:
         '{"type":"object","properties":{"topic":{"type":"string"},"payload":{"type":"string"}},"required":["topic","payload"]}',
@@ -49,7 +49,7 @@ export const DEFAULT_SETTINGS = {
     {
       id: 'os_command',
       name: 'os_command',
-      description: 'Translate a natural-language instruction into an OS terminal command and publish it via MQTT. Use ONLY for os_terminal type devices — never for hub devices.',
+      description: 'แปลงคำสั่งภาษาธรรมชาติเป็นคำสั่ง terminal แล้วส่งผ่าน MQTT ใช้กับอุปกรณ์ประเภท os_terminal เท่านั้น ห้ามใช้กับ hub',
       enabled: true,
       schema:
         '{"type":"object","properties":{"instruction":{"type":"string","description":"Natural language description of what to do on the remote machine"},"os":{"type":"string","enum":["windows","mac","linux"],"description":"Target operating system"},"topic":{"type":"string","description":"MQTT pubTopic of the target os_terminal device"},"wait_output":{"type":"boolean","description":"True if the command is expected to return output (e.g. dir, ls, cat). False for fire-and-forget commands (e.g. shutdown, reboot, open app)."}},"required":["instruction","os","topic","wait_output"]}',
@@ -57,7 +57,7 @@ export const DEFAULT_SETTINGS = {
     {
       id: 'web_search',
       name: 'web_search',
-      description: 'Search the web only when the user explicitly requests external information (news, weather, prices, facts). Do not use for greetings, small talk, or general conversation.',
+      description: 'ค้นหาข้อมูลจากอินเตอร์เน็ต ใช้เมื่อผู้ใช้ขอข้อมูลภายนอกเท่านั้น เช่น ข่าว อากาศ ราคา ข้อเท็จจริง ไม่ใช้สำหรับการทักทายหรือสนทนาทั่วไป',
       enabled: true,
       schema:
         '{"type":"object","properties":{"query":{"type":"string","description":"Concise and specific search query"}},"required":["query"]}',
@@ -65,7 +65,7 @@ export const DEFAULT_SETTINGS = {
     {
       id: 'hub',
       name: 'hub',
-      description: 'Execute a task on a remote hub agent. Use ONLY for hub type devices — never for os_terminal devices. The agent runs a ReAct loop (can search web, run multiple commands) and streams output back.',
+      description: 'ส่งคำสั่งให้ hub agent ทำงานบนเครื่องระยะไกล ใช้กับอุปกรณ์ประเภท hub เท่านั้น ห้ามใช้กับ os_terminal agent รัน ReAct loop ได้ (ค้นหาเว็บ รันหลายคำสั่ง) และส่งผลลัพธ์กลับแบบ stream',
       enabled: true,
       schema:
         '{"type":"object","properties":{"task":{"type":"string","description":"Natural language description of what to do on the remote machine"},"topic":{"type":"string","description":"MQTT pubTopic of the target hub device"}},"required":["task","topic"]}',

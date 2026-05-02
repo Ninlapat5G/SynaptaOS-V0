@@ -103,7 +103,15 @@ def run(
                 return "[cancelled]"
 
             name = tc.function.name
-            args = json.loads(tc.function.arguments)
+            try:
+                args = json.loads(tc.function.arguments)
+            except json.JSONDecodeError as exc:
+                messages.append({
+                    "role":         "tool",
+                    "tool_call_id": tc.id,
+                    "content":      f"[error] Invalid tool arguments: {exc}",
+                })
+                continue
 
             if name == "os_exec":
                 pub(f"$ {args['command']}")
