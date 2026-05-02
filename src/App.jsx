@@ -350,6 +350,9 @@ export default function App() {
                     onSave={handleSaveSettings}
                     mqttStatus={mqttStatus}
                     onClearAll={handleClearAll}
+                    mqttPublish={mqttPublish}
+                    mqttWaitForMessage={mqttWaitForMessage}
+                    sensorCache={sensorCache}
                   />
                 </ErrorBoundary>
               </motion.div>

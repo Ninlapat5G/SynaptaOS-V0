@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import Icon from './ui/Icon'
 import Toggle from './ui/Toggle'
+import CfgSharePanel from './CfgSharePanel'
 import { saveDevices, loadDevices, saveAreas, loadAreas } from '../utils/storage'
 
 const MQTT_STATUS_LABEL = {
@@ -20,7 +21,8 @@ const MQTT_DOT_STYLE = {
   offline: { background: 'var(--ink-xdim)', animation: 'none' },
 }
 
-export default function SettingsPage({ settings, onSave, mqttStatus = 'offline', onClearAll }) {
+export default function SettingsPage({ settings, onSave, mqttStatus = 'offline', onClearAll,
+  mqttPublish, mqttWaitForMessage, sensorCache }) {
   const [s, setS] = useState(settings)
 
   useEffect(() => { setS(settings) }, [settings])
@@ -302,23 +304,31 @@ export default function SettingsPage({ settings, onSave, mqttStatus = 'offline',
               <div className="sh-sect-num mono">06</div>
               <div>
                 <h3>Share Configuration</h3>
-                <p>คัดลอกหรือวาง JSON เพื่อย้าย Settings, Devices และ Areas ข้ามเครื่อง</p>
+                <p>ย้าย Settings, Devices และ Areas ข้ามเครื่อง — แบบ JSON หรือส่งแบบไร้สายด้วย PIN</p>
               </div>
             </div>
             <div className="sh-grid2">
               <div className="sh-field">
-                <label className="mono" style={{ marginBottom: 4 }}>Export Data</label>
+                <label className="mono" style={{ marginBottom: 4 }}>Export JSON</label>
                 <button className="sh-btn-ghost w-full" style={{ justifyContent: 'center', height: 40 }} onClick={exportData}>
                   <Icon name="copy" size={14} /> Copy Config JSON
                 </button>
               </div>
               <div className="sh-field">
-                <label className="mono" style={{ marginBottom: 4 }}>Import Data</label>
+                <label className="mono" style={{ marginBottom: 4 }}>Import JSON</label>
                 <button className="sh-btn-ghost w-full" style={{ justifyContent: 'center', height: 40 }} onClick={importData}>
-                  <Icon name="download" size={14} /> Paste JSON
+                  <Icon name="upload" size={14} /> Paste JSON
                 </button>
               </div>
             </div>
+            <div className="sh-share-divider mono">— ส่งแบบไร้สาย (เข้ารหัส AES-GCM · หมดอายุ 5 นาที) —</div>
+            <CfgSharePanel
+              settings={s}
+              onSave={onSave}
+              mqttPublish={mqttPublish}
+              mqttWaitForMessage={mqttWaitForMessage}
+              sensorCache={sensorCache}
+            />
           </section>
 
           {/* 07 Data */}
