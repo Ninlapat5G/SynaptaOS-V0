@@ -180,7 +180,7 @@ export default function App() {
           onCloseMobile={() => setMobileNav(false)}
         />
 
-        <main className="sh-main">
+        <main className={`sh-main${page === 'chat' ? ' sh-main-chat' : ''}`}>
           {mqttUnhealthy && (
             <div className={`sh-mqtt-banner ${mqttStatus === 'error' ? 'error' : ''}`}>
               <span style={{ animation: 'pulse-dot 1s ease-in-out infinite', display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: 'currentColor', flexShrink: 0 }} />
