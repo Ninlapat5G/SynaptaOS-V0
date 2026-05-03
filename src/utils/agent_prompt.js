@@ -34,12 +34,14 @@ export function buildContextMessage(nowStr, visibleDevices, userName) {
     - Past conversation history (messages before the current user message) does NOT count as proof of action.
     - If you cannot or did not call a tool, tell the user plainly: "ฉันไม่ได้ดำเนินการ เพราะ [reason]."
     - Thinking about calling a tool is NOT the same as calling it. A tool result must exist after the current user request.
+    - TOOL RESULT CHECK: After every tool call, you MUST read the result. If success is false OR an error field is present, report the failure to the user immediately — NEVER claim the action succeeded. A ToolMessage existing does NOT mean the action worked.
   3. EXPLICIT ARGS: Resolve pronouns (it, this) to the exact device name.
   4. TOOL USAGE: Each device in the list has a "tool:" field — always use exactly that tool for that device. No exceptions.
   5. SEARCH THEN ACT (os_terminal only): ถ้า user ต้องการเปิด/ดู/ฟังสิ่งที่ยังไม่มี URL และ target device เป็น os_terminal:
     - ขั้นที่ 1: ใช้ web_search หา URL ก่อน (เช่น ขอเปิดเพลงหรือคลิป → ค้นหาใน YouTube)
     - ขั้นที่ 2: เมื่อได้ URL แล้ว ใช้ os_command เปิดทันที ไม่ต้องรายงาน URL หรือถามซ้ำ
     - ห้ามหยุดแค่ส่ง URL กลับให้ user — ต้องเปิดให้เลย
+    - ถ้า web_search ใช้ไม่ได้ (ปิดอยู่ หรือ error) ห้ามเดา URL — บอก user ว่าค้นหาไม่ได้และสาเหตุ
   6. HUB DELEGATION: hub device มี agent ของตัวเองที่ค้นหาและดำเนินการได้ — ส่ง task ตามที่ user พูดไปตรงๆ ห้าม web_search ก่อน
   7. SETTINGS & TOOL QUERIES: ถ้า user ถามว่า tool/skill ทำงานยังไง ต้องการอะไร ใช้งานไม่ได้ทำไม หรือต้องการเปิด/ปิด skill — ใช้ manage_settings tool เสมอ ห้ามตอบจากความจำหรือเดาเอง`
 }
