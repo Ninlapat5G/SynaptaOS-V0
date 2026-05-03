@@ -56,11 +56,27 @@ export default function App() {
   const { devices, setDevices, devicesRef, handleMqttMessage, removeDevice } = useDevices({ baseTopicRef })
 
   // ── MQTT ──────────────────────────────────────────────────────────────────────
-  const { client: mqttClient, status: mqttStatus, sensorCache, publish: mqttPublish,
-    waitForMessage: mqttWaitForMessage, waitForStream: mqttWaitForStream } = useMQTT({
+  // Debounce mqtt config so changing broker/port/baseTopic in Settings doesn't
+  // reconnect on every keystroke — waits 800ms after the last change.
+  const [mqttCfg, setMqttCfg] = useState({
     broker: settings.mqtt.broker,
     port: settings.mqtt.port,
     baseTopic: settings.mqtt.baseTopic,
+  })
+  useEffect(() => {
+    const t = setTimeout(() => setMqttCfg({
+      broker: settings.mqtt.broker,
+      port: settings.mqtt.port,
+      baseTopic: settings.mqtt.baseTopic,
+    }), 800)
+    return () => clearTimeout(t)
+  }, [settings.mqtt.broker, settings.mqtt.port, settings.mqtt.baseTopic])
+
+  const { client: mqttClient, status: mqttStatus, sensorCache, publish: mqttPublish,
+    waitForMessage: mqttWaitForMessage, waitForStream: mqttWaitForStream } = useMQTT({
+    broker: mqttCfg.broker,
+    port: mqttCfg.port,
+    baseTopic: mqttCfg.baseTopic,
     onMessage: handleMqttMessage,
   })
 
