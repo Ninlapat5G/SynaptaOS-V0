@@ -170,7 +170,7 @@ export default function App() {
   const skillCount   = (settings.skills || []).filter(s => s.enabled).length
   const modelShort   = (settings.model || 'typhoon-v2').split('-instruct')[0]
   const visibleDevices = devices.filter(d => activeArea === 'All' || d.room === activeArea)
-  const mqttUnhealthy  = mqttStatus === 'reconnecting' || mqttStatus === 'error'
+  const mqttUnhealthy  = mqttStatus === 'reconnecting' || mqttStatus === 'error' || mqttStatus === 'offline'
 
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
@@ -350,8 +350,8 @@ export default function App() {
                     onSave={handleSaveSettings}
                     mqttStatus={mqttStatus}
                     onClearAll={handleClearAll}
-                    mqttPublish={mqttPublish}
-                    mqttWaitForMessage={mqttWaitForMessage}
+                    mqttPublish={mqttStatus === 'connected' ? mqttPublish : null}
+                    mqttWaitForMessage={mqttStatus === 'connected' ? mqttWaitForMessage : null}
                     sensorCache={sensorCache}
                   />
                 </ErrorBoundary>

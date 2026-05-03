@@ -60,10 +60,11 @@ export default function CfgSharePanel({ settings, onSave, mqttPublish, mqttWaitF
   const [chars, setChars] = useState(['', '', '', '', '', ''])
   const [err,  setErr]    = useState('')
 
-  const timerRef  = useRef(null)
-  const hexRef    = useRef('')
-  const abortRef  = useRef(false)
-  const inputRefs = useRef([])
+  const timerRef     = useRef(null)
+  const hexRef       = useRef('')
+  const abortRef     = useRef(false)
+  const inputRefs    = useRef([])
+  const doCancelRef  = useRef(null)
 
   useEffect(() => () => { clearInterval(timerRef.current); abortRef.current = true }, [])
 
@@ -91,7 +92,7 @@ export default function CfgSharePanel({ settings, onSave, mqttPublish, mqttWaitF
     setMode('sending')
 
     timerRef.current = setInterval(() =>
-      setSecs(s => { if (s <= 1) { doCancel(hex); return 0 } return s - 1 }), 1000)
+      setSecs(s => { if (s <= 1) { doCancelRef.current?.(hex); return 0 } return s - 1 }), 1000)
 
     const ack = await mqttWaitForMessage(full(ackRel(hex)), TTL * 1000)
     if (abortRef.current) return
@@ -101,7 +102,8 @@ export default function CfgSharePanel({ settings, onSave, mqttPublish, mqttWaitF
       setMode('success')
       setTimeout(() => { if (!abortRef.current) setMode('idle') }, 3000)
     } else {
-      setMode('idle')
+      setErr('หมดเวลา — ไม่ได้รับการยืนยันจากอุปกรณ์ปลายทาง')
+      setTimeout(() => { if (!abortRef.current) { setMode('idle'); setErr('') } }, 3000)
     }
   }
 
@@ -114,6 +116,8 @@ export default function CfgSharePanel({ settings, onSave, mqttPublish, mqttWaitF
     setPin('')
     setSecs(TTL)
   }, [mqttPublish])
+
+  useEffect(() => { doCancelRef.current = doCancel }, [doCancel])
 
   // ── Receiver ────────────────────────────────────────────────────────────────
   const handleChar = (i, val) => {
@@ -218,6 +222,12 @@ export default function CfgSharePanel({ settings, onSave, mqttPublish, mqttWaitF
               />
               <span className="mono">{fmt(secs)} เหลืออยู่ · รอการยืนยันจากอุปกรณ์ปลายทาง</span>
             </div>
+            {err && (
+              <motion.div className="sh-pin-error mono"
+                initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }}>
+                {err}
+              </motion.div>
+            )}
             <button className="sh-btn-dim" onClick={() => doCancel()}>
               <Icon name="close" size={12} /> ยกเลิก
             </button>
