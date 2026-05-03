@@ -1,18 +1,12 @@
 #include "RuleEngine.h"
 
-// ── Init ──────────────────────────────────────────────────────────────────────
-
 void RuleEngine::begin(RuleStore* store, std::vector<SynaptaDevice*>& devices) {
     _store   = store;
     _devices = &devices;
 }
 
-// ── Evaluate ──────────────────────────────────────────────────────────────────
-
-// Called every loop() tick.
-// Uses rising-edge detection: the action fires once when the condition
-// transitions from false → true. It will not re-fire while the condition
-// stays true, preventing repeated execution.
+// Rising-edge: action fires once when condition changes false → true.
+// Prevents repeated firing while condition stays true.
 void RuleEngine::evaluate() {
     if (!_store || !_devices) return;
 
@@ -21,7 +15,6 @@ void RuleEngine::evaluate() {
         bool last    = _getLastState(r.id);
 
         if (current && !last) {
-            // Condition just became true — execute the action once
             _executeAction(r);
         }
 
@@ -29,16 +22,6 @@ void RuleEngine::evaluate() {
     }
 }
 
-// ── Parse & manage ────────────────────────────────────────────────────────────
-
-// Accepts the JSON payload from the MQTT rules/set topic.
-// Expected format:
-// {
-//   "id":        "rule-01",
-//   "condition": { "device": "bedroom-temp", "op": ">", "value": 30 },
-//   "action":    { "device": "bedroom-ac",   "set": true },
-//   "persist":   true
-// }
 bool RuleEngine::parseAndAdd(const char* json) {
     if (!_store) return false;
 
@@ -46,17 +29,15 @@ bool RuleEngine::parseAndAdd(const char* json) {
     if (deserializeJson(doc, json) != DeserializationError::Ok) return false;
 
     Rule r;
-    r.id         = doc["id"]                   | "";
-    r.condDevice = doc["condition"]["device"]  | "";
-    r.condOp     = doc["condition"]["op"]      | ">";
-    r.condValue  = doc["condition"]["value"]   | 0.0f;
-    r.actDevice  = doc["action"]["device"]     | "";
-    r.persist    = doc["persist"]              | false;
+    r.id         = doc["id"]                  | "";
+    r.condDevice = doc["condition"]["device"] | "";
+    r.condOp     = doc["condition"]["op"]     | ">";
+    r.condValue  = doc["condition"]["value"]  | 0.0f;
+    r.actDevice  = doc["action"]["device"]    | "";
+    r.persist    = doc["persist"]             | false;
 
-    if (r.id.length() == 0 || r.condDevice.length() == 0 || r.actDevice.length() == 0)
-        return false;
+    if (r.id.isEmpty() || r.condDevice.isEmpty() || r.actDevice.isEmpty()) return false;
 
-    // The "set" value in action can be bool or int
     JsonVariant setVal = doc["action"]["set"];
     if (setVal.is<bool>()) {
         r.actIsBool = true;
@@ -79,8 +60,6 @@ String RuleEngine::listJson() const {
     return _store->toJson();
 }
 
-// ── Private ───────────────────────────────────────────────────────────────────
-
 bool RuleEngine::_evaluateCondition(const Rule& r) const {
     float val = _getDeviceValue(r.condDevice);
     if (isnan(val)) return false;
@@ -96,7 +75,7 @@ void RuleEngine::_executeAction(const Rule& r) {
             return;
         }
     }
-    Serial.println("[Synapta] Rule action target not found: " + r.actDevice);
+    Serial.println("[Synapta] Rule target not found: " + r.actDevice);
 }
 
 float RuleEngine::_getDeviceValue(const String& deviceId) const {
@@ -112,8 +91,8 @@ bool RuleEngine::_compare(float actual, const String& op, float threshold) const
     if (op == "<")  return actual <  threshold;
     if (op == ">=") return actual >= threshold;
     if (op == "<=") return actual <= threshold;
-    if (op == "==") return actual == threshold;
-    if (op == "!=") return actual != threshold;
+    if (op == "==") return fabsf(actual - threshold) < 1e-4f;
+    if (op == "!=") return fabsf(actual - threshold) >= 1e-4f;
     return false;
 }
 

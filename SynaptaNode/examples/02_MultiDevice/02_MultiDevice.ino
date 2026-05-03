@@ -1,55 +1,48 @@
 /*
  * 02_MultiDevice — Multiple devices on one ESP32
- * ------------------------------------------------
- * One ESP32 can handle many devices at once.
- * Each SynaptaDevice declares itself globally and auto-registers.
- *
- * This example shows:
- *   - A digital relay (on/off)
- *   - An analog PWM dimmer (0–255)
- *   - attachPin  / attachPWM  for zero-callback GPIO control
  *
  * Web App setup — add each device with its matching id & room:
  *   bedroom-relay  | bedroom | digital
  *   bedroom-dimmer | bedroom | analog
  *
  * Wiring:
- *   Relay IN  → GPIO 2
+ *   Relay IN   → GPIO 2
  *   LED/MOSFET → GPIO 4  (PWM capable)
  */
 
 #include <Synapta.h>
 
-// ── Device Declarations ───────────────────────────────────────────────────────
 SynaptaDevice relay ("bedroom-relay",  "bedroom", NODE_DIGITAL);
 SynaptaDevice dimmer("bedroom-dimmer", "bedroom", NODE_ANALOG);
 
-// ── Setup ─────────────────────────────────────────────────────────────────────
 void setup() {
     Serial.begin(115200);
 
     Synapta.begin("YOUR_WIFI_SSID", "YOUR_WIFI_PASSWORD", "Mylab/smarthome");
 
-    // attachPin: GPIO is controlled automatically — no callback needed.
-    // When Web App sends "true", GPIO goes HIGH. "false" → LOW.
+    // Auto-control GPIO — no callback needed.
+    // Web App sends "true" → HIGH, "false" → LOW
     relay.attachPin(2);
 
-    // attachPWM: PWM value is written automatically via ledcWrite.
-    // When Web App sends "128", the pin outputs ~50% duty cycle.
+    // Auto PWM — Web App sends 0–255 → ledcWrite
     dimmer.attachPWM(4);
 
-    // You can still add onCommand on top of attachPin/attachPWM
-    // if you need extra logic (e.g. logging, triggering other actions).
+    // Optional: extra logic on top of attachPin/attachPWM
     relay.onCommand([](bool on) {
-        Serial.println("Relay: " + String(on ? "ON" : "OFF"));
+        if (on) {
+            Serial.println("Relay: ON");
+        } else {
+            Serial.println("Relay: OFF");
+        }
     });
 
     dimmer.onValue([](int val) {
-        Serial.println("Dimmer: " + String(val) + "/255");
+        Serial.print("Dimmer: ");
+        Serial.print(val);
+        Serial.println("/255");
     });
 }
 
-// ── Loop ──────────────────────────────────────────────────────────────────────
 void loop() {
     Synapta.loop();
 }

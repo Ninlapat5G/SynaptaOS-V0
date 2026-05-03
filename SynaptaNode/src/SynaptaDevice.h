@@ -3,72 +3,43 @@
 #include <functional>
 #include "SynaptaRegistry.h"
 
-// Prefixed to avoid conflicts with ESP32 core macros
-// (esp32-hal-gpio.h defines ANALOG as 0xC0)
+// NODE_* prefix avoids conflict with ESP32 core macros (esp32-hal-gpio.h defines ANALOG)
 enum DeviceType { NODE_DIGITAL, NODE_ANALOG, NODE_SENSOR };
 
-// Represents one controllable device on this ESP32.
-//
-// Declare globally in the sketch — the device auto-registers itself
-// with SynaptaNode and its command topic is subscribed on MQTT connect.
-//
-// Topics are derived automatically from room + id:
-//   cmd   → {baseTopic}/{room}/{id}/set
-//   state → {baseTopic}/{room}/{id}/state
 class SynaptaDevice {
 public:
-    // id   : unique device ID — must match the device ID configured in the Web App
-    // room : room name (e.g. "bedroom", "living-room") — used to build the MQTT topic
-    // type : DIGITAL | ANALOG | SENSOR
+    // Declare globally — device auto-registers and is subscribed on MQTT connect.
+    // Topics: {baseTopic}/{room}/{id}/set  and  {baseTopic}/{room}/{id}/state
     SynaptaDevice(const char* id, const char* room, DeviceType type);
 
-    // ── Command handlers ─────────────────────────────────────────────────────
-
-    // DIGITAL: called when Web App sends a command (on/off)
+    // DIGITAL: fires on "true"/"on"/"1"/"toggle"/"false"/"off"/"0"
     void onCommand(std::function<void(bool)> cb);
 
-    // ANALOG: called when Web App sends a value (0–255)
-    // Named separately to avoid C++ ambiguity (bool is implicitly convertible to int)
+    // ANALOG: fires on 0–255 value
+    // Separate from onCommand to avoid bool/int ambiguity in C++
     void onValue(std::function<void(int)> cb);
 
-    // Auto-control a GPIO pin with no callback needed.
-    // DIGITAL: sets pin HIGH (on) or LOW (off) automatically
-    void attachPin(uint8_t pin);
+    // Auto-drive a GPIO pin — no callback needed
+    void attachPin(uint8_t pin);   // DIGITAL: HIGH/LOW
+    void attachPWM(uint8_t pin);   // ANALOG: 8-bit PWM via ledcWrite
 
-    // Auto-control a PWM pin with no callback needed.
-    // ANALOG: writes the received value (0–255) to the pin via ledcWrite
-    // Uses ESP32 Arduino 3.x ledc API (ledcAttach / ledcWrite)
-    void attachPWM(uint8_t pin);
-
-    // Attach a physical push button (active-low, internal pull-up).
-    // Pressing the button toggles the device state and publishes it back
-    // to the Web App — UI stays in sync with physical interactions.
+    // Attach active-low push button (internal pull-up, 50 ms debounce).
+    // Pressing toggles state and publishes back to Web App.
     void attachButton(uint8_t pin);
 
-    // ── Sensor reporting ─────────────────────────────────────────────────────
-
-    // SENSOR only: call cb every <intervalMs> milliseconds.
-    // cb must return a float — the library converts it to String for MQTT.
-    // Example: temp.every(30000, []() { return dht.readTemperature(); });
+    // SENSOR: call cb every intervalMs ms, publish the returned float
     void every(uint32_t intervalMs, std::function<float()> cb);
 
-    // ── Manual state control ─────────────────────────────────────────────────
+    // Set state manually from code (e.g. from a rule)
+    void set(bool state);
+    void set(int  value);
 
-    // Manually set state from code (e.g. from a rule or timer).
-    // Executes GPIO/callback and publishes the new state to Web App.
-    void set(bool state);   // DIGITAL
-    void set(int  value);   // ANALOG
-
-    // Read the current state value (used by RuleEngine for conditions).
-    // DIGITAL → 0.0 or 1.0
-    // ANALOG  → 0.0–255.0
-    // SENSOR  → last reported value
+    // Current value — used by RuleEngine for condition evaluation
     float value() const;
 
-    // ── Internal (used by SynaptaNode & RuleEngine) ──────────────────────────
-
+    // Internal — called by SynaptaNode and RuleEngine
     void   _handleMessage(const char* payload);
-    void   _reportState();
+    void   _reportState() { _publishState(); }
     void   _loop();
 
     String _cmdTopic  (const String& base) const;
@@ -81,37 +52,30 @@ private:
     String     _id, _room;
     DeviceType _type;
 
-    // Current state
     bool  _stateBool  = false;
     float _stateFloat = 0;
 
-    // User callbacks
     std::function<void(bool)>  _cbDigital;
     std::function<void(int)>   _cbAnalog;
     std::function<float()>     _cbSensor;
 
-    // Auto GPIO
-    uint8_t _pin   = 255;   // 255 = not attached
+    uint8_t _pin = 255;  // 255 = not attached
+#if !defined(ESP_ARDUINO_VERSION_MAJOR) || ESP_ARDUINO_VERSION_MAJOR < 3
+    int8_t _pwmChannel = -1;  // LEDC channel for ESP32 core 2.x
+#endif
 
-    // Physical button debounce state
     uint8_t  _btnPin         = 255;
     bool     _btnLastReading = HIGH;
     bool     _btnPressed     = false;
     uint32_t _btnDebounceMs  = 0;
 
-    // Sensor interval
     uint32_t _interval   = 0;
     uint32_t _lastReport = 0;
 
-    // Helpers
     bool _parseBool(const char* s) const;
-    int  _parseInt (const char* s) const;
-
     void _executeDigital(bool on);
     void _executeAnalog (int  val);
     void _publishState  ();
 
-    // Normalise room name for use in MQTT topics:
-    // "Living Room" → "living-room"
     static String _normalise(const String& s);
 };

@@ -2,7 +2,7 @@
 
 ESP32 Arduino library for the [Synapta](https://github.com/Ninlapat5G) smart home system.
 
-Connect an ESP32 as a **node** — it receives commands from the Synapta Web AI directly via MQTT, controls physical hardware, reports state back, and can run local automation rules injected from the Web App.
+Connect an ESP32 as a **node** — it receives commands from the Synapta Web AI directly via MQTT, controls physical hardware, and reports state back.
 
 ---
 
@@ -121,49 +121,6 @@ Integer string `"0"` – `"255"`
 
 ---
 
-## Dynamic Rules
-
-Rules can be created by the Web App AI at runtime and run **locally on the ESP32**, even without internet.
-
-### Rule JSON format
-```json
-{
-  "id":        "rule-01",
-  "condition": { "device": "bedroom-temp", "op": ">", "value": 30 },
-  "action":    { "device": "bedroom-ac",   "set": true },
-  "persist":   true
-}
-```
-
-| Field | Description |
-|-------|-------------|
-| `id` | Unique rule identifier |
-| `condition.device` | Device ID to read value from |
-| `condition.op` | Operator: `>` `<` `>=` `<=` `==` `!=` |
-| `condition.value` | Threshold to compare against |
-| `action.device` | Device ID to control |
-| `action.set` | `true`/`false` for NODE_DIGITAL, integer for NODE_ANALOG |
-| `persist` | `true` = save to NVRAM, `false` = RAM only |
-
-Capacity: up to **20 rules** total.
-
-### Rule MQTT topics
-
-The node ID is auto-derived from the ESP32 MAC address.
-Check Serial Monitor after `Synapta.begin()` to find it.
-
-| Topic | Direction | Payload |
-|-------|-----------|---------|
-| `{base}/nodes/{nodeId}/rules/set` | Web App → ESP32 | Rule JSON |
-| `{base}/nodes/{nodeId}/rules/delete` | Web App → ESP32 | Rule ID string |
-| `{base}/nodes/{nodeId}/rules/request` | Web App → ESP32 | any (triggers list response) |
-| `{base}/nodes/{nodeId}/rules/list` | ESP32 → Web App | JSON array of all rules |
-
-### Trigger behaviour
-Rules use **rising-edge detection**: the action fires **once** when the condition transitions from `false → true`. It will not repeat while the condition stays true.
-
----
-
 ## Web App Device Configuration
 
 For each `SynaptaDevice` in your sketch, add a matching device in the Web App:
@@ -186,7 +143,6 @@ For each `SynaptaDevice` in your sketch, add a matching device in the Web App:
 | `02_MultiDevice` | Relay + PWM dimmer, `attachPin` / `attachPWM` |
 | `03_Sensor` | DHT22 temperature reporting every 30 s |
 | `04_PhysicalButton` | Toggle button keeps Web App UI in sync |
-| `05_DynamicRules` | Rules injected from Web App, runs offline |
 
 ---
 
