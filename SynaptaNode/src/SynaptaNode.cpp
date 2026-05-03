@@ -31,9 +31,6 @@ void SynaptaNodeClass::_init() {
         _devices.push_back(d);
     }
 
-    _ruleStore.load();
-    _ruleEngine.begin(&_ruleStore, _devices);
-
     if (_cfg.mqttTLS) {
         _tlsClient.setInsecure();
         _mqtt.setClient(_tlsClient);
@@ -58,7 +55,6 @@ void SynaptaNodeClass::loop() {
             _connectWiFi();
         }
         for (auto* d : _devices) d->_loop();  // buttons still work offline
-        _ruleEngine.evaluate();
         return;
     }
 
@@ -81,7 +77,6 @@ void SynaptaNodeClass::loop() {
 
     _mqtt.loop();
     for (auto* d : _devices) d->_loop();
-    _ruleEngine.evaluate();
 }
 
 bool SynaptaNodeClass::isConnected() {
@@ -146,10 +141,6 @@ bool SynaptaNodeClass::_connectMQTT() {
         Serial.print("[Synapta] Subscribed: ");
         Serial.println(t);
     }
-    _mqtt.subscribe(_rulesSetTopic().c_str(),     1);
-    _mqtt.subscribe(_rulesDeleteTopic().c_str(),  1);
-    _mqtt.subscribe(_rulesRequestTopic().c_str(), 1);
-
     for (auto* d : _devices) d->_reportState();  // sync UI on reconnect
 
     return true;
@@ -170,28 +161,6 @@ void SynaptaNodeClass::_onMessage(char* topic, uint8_t* payload, unsigned int le
         }
     }
 
-    if (topicStr == _rulesSetTopic()) {
-        if (_ruleEngine.parseAndAdd(payloadStr.c_str())) {
-            Serial.println("[Synapta] Rule added/updated");
-        } else {
-            Serial.println("[Synapta] Rule rejected (invalid JSON or store full)");
-        }
-        return;
-    }
-
-    if (topicStr == _rulesDeleteTopic()) {
-        if (_ruleEngine.removeById(payloadStr.c_str())) {
-            Serial.println("[Synapta] Rule deleted: " + payloadStr);
-        } else {
-            Serial.println("[Synapta] Rule not found: " + payloadStr);
-        }
-        return;
-    }
-
-    if (topicStr == _rulesRequestTopic()) {
-        _publish(_rulesListTopic().c_str(), _ruleEngine.listJson().c_str(), false);
-        return;
-    }
 }
 
 String SynaptaNodeClass::_macSuffix() const {
@@ -209,8 +178,4 @@ String SynaptaNodeClass::_nodeId() const {
     return "node-" + _macSuffix();
 }
 
-String SynaptaNodeClass::_statusTopic()       const { return _cfg.baseTopic + "/nodes/" + _nodeId() + "/status"; }
-String SynaptaNodeClass::_rulesSetTopic()     const { return _cfg.baseTopic + "/nodes/" + _nodeId() + "/rules/set"; }
-String SynaptaNodeClass::_rulesDeleteTopic()  const { return _cfg.baseTopic + "/nodes/" + _nodeId() + "/rules/delete"; }
-String SynaptaNodeClass::_rulesRequestTopic() const { return _cfg.baseTopic + "/nodes/" + _nodeId() + "/rules/request"; }
-String SynaptaNodeClass::_rulesListTopic()    const { return _cfg.baseTopic + "/nodes/" + _nodeId() + "/rules/list"; }
+String SynaptaNodeClass::_statusTopic() const { return _cfg.baseTopic + "/nodes/" + _nodeId() + "/status"; }

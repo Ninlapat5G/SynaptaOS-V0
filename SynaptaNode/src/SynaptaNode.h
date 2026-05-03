@@ -7,8 +7,6 @@
 #include <functional>
 #include "NodeConfig.h"
 #include "SynaptaDevice.h"
-#include "rules/RuleStore.h"
-#include "rules/RuleEngine.h"
 
 class SynaptaNodeClass {
 public:
@@ -32,8 +30,6 @@ private:
     PubSubClient     _mqtt;
 
     std::vector<SynaptaDevice*> _devices;
-    RuleStore  _ruleStore;
-    RuleEngine _ruleEngine;
 
     std::function<void()> _cbConnect;
     std::function<void()> _cbDisconnect;
@@ -45,13 +41,9 @@ private:
     void _connectWiFi();
     bool _connectMQTT();
 
-    String _macSuffix()        const;
-    String _nodeId()           const;
-    String _statusTopic()      const;
-    String _rulesSetTopic()    const;
-    String _rulesDeleteTopic() const;
-    String _rulesRequestTopic() const;
-    String _rulesListTopic()   const;
+    String _macSuffix()   const;
+    String _nodeId()      const;
+    String _statusTopic() const;
 
     // PubSubClient requires a static callback
     static void _mqttCallback(char* topic, uint8_t* payload, unsigned int len);

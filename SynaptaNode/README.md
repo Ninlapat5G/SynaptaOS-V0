@@ -29,7 +29,6 @@ The Web AI talks directly to the ESP32. No hub required for device control.
 
 1. Install dependencies via **Arduino Library Manager**:
    - `PubSubClient` by Nick O'Leary
-   - `ArduinoJson` by Benoît Blanchon
 
 2. Copy the `SynaptaNode` folder into your Arduino `libraries/` directory.
 
@@ -151,7 +150,6 @@ For each `SynaptaDevice` in your sketch, add a matching device in the Web App:
 | Library | Install via |
 |---------|-------------|
 | PubSubClient | Arduino Library Manager |
-| ArduinoJson | Arduino Library Manager |
 | DHT sensor library (examples only) | Arduino Library Manager |
 
 Built-in (no install needed): `WiFi`, `WiFiClientSecure`, `Preferences`
